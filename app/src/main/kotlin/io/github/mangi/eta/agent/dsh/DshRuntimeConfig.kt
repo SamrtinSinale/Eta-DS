@@ -10,7 +10,9 @@ import org.json.JSONObject
  * 运行时来自随 APK 分发的内置包（见 [DshRuntimeInstaller]），不依赖用户自己安装
  * 任何 Linux 发行版或 npm 包。
  *
- * 凭据通过环境变量传入而不是命令行参数，避免出现在进程列表里。
+ * 两个必须注意的点：
+ * 1. chroot 需要 root，App 进程本身没有权限，因此命令必须经 `su -c` 包装；
+ * 2. 凭据通过 `export` 传进这条 shell 命令，而不是命令行参数，避免出现在进程列表里。
  */
 internal data class DshRuntimeConfig(
     val rootfsPath: String,
@@ -20,22 +22,25 @@ internal data class DshRuntimeConfig(
     val baseUrl: String,
     val workingDirectory: String = DshRuntimeInstaller.WORKSPACE_IN_ROOT,
 ) {
-    /** 在运行时根目录内直接执行，不经过登录 shell，避免额外进程与引号问题。 */
-    fun command(): List<String> = listOf(
-        CHROOT,
-        rootfsPath,
-        DshRuntimeInstaller.NODE_IN_ROOT,
-        DshRuntimeInstaller.DSH_ENTRY_IN_ROOT,
-        "--profile",
-        ACP_PROFILE,
-    )
+    /** su 是 Eta 既有提权路径；脚本里的 export 保证凭据不落进 argv。 */
+    fun command(): List<String> = listOf(SU, "-c", rootScript())
 
     fun environment(): Map<String, String> = buildMap {
-        if (apiKey.isNotBlank()) put(ENV_API_KEY, apiKey)
-        if (baseUrl.isNotBlank()) put(ENV_BASE_URL, baseUrl)
         put("HOME", DshRuntimeInstaller.HOME_IN_ROOT)
         put("PATH", PATH_IN_ROOT)
         put("LANG", "C.UTF-8")
+    }
+
+    private fun rootScript(): String = buildString {
+        append("export HOME=").append(DshRuntimeInstaller.HOME_IN_ROOT)
+        append(" PATH=").append(PATH_IN_ROOT)
+        append(" LANG=C.UTF-8")
+        if (apiKey.isNotBlank()) append(" DEEPSEEK_API_KEY=").append(shellQuote(apiKey))
+        if (baseUrl.isNotBlank()) append(" DEEPSEEK_BASE_URL=").append(shellQuote(baseUrl))
+        append("; exec chroot ").append(shellQuote(rootfsPath))
+        append(' ').append(DshRuntimeInstaller.NODE_IN_ROOT)
+        append(' ').append(DshRuntimeInstaller.DSH_ENTRY_IN_ROOT)
+        append(" --profile ").append(ACP_PROFILE)
     }
 
     /**
@@ -54,7 +59,7 @@ internal data class DshRuntimeConfig(
     }
 
     companion object {
-        private const val CHROOT = "chroot"
+        private const val SU = "su"
         private const val ACP_PROFILE = "acp"
         private const val PATH_IN_ROOT = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
         private const val ENV_API_KEY = "DEEPSEEK_API_KEY"
@@ -81,5 +86,8 @@ internal data class DshRuntimeConfig(
                 baseUrl = baseUrl,
             )
         }
+
+        private fun shellQuote(value: String): String =
+            "'" + value.replace("'", "'\\''") + "'"
     }
 }
