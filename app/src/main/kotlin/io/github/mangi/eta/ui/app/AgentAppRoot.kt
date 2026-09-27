@@ -119,7 +119,7 @@ fun AgentAppRoot(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 RootAccess.refresh(context)
-                appViewModel.refreshKimiWeb()
+                appViewModel.refreshDshWeb()
                 agentState.refreshPermissionHealth()
                 agentState.refreshRuntimeResults()
             }
@@ -222,11 +222,11 @@ fun AgentAppRoot(
             onSearchConversations = { query -> agentState.updateSearchQuery(query) },
             onNewConversation = { createConversation() },
             onOpenTerminal = { pushRoute(AppRoute.Terminal) },
-            onLaunchKimiWeb = {
+            onLaunchDshWeb = {
                 requestExecutionNotifications()
-                if (appViewModel.kimiWebState.phase != KimiWebPhase.NOT_INSTALLED) {
-                    appViewModel.launchKimiWeb { result ->
-                        if (result is KimiWebLaunchResult.Failed) {
+                if (appViewModel.dshWebState.phase != DshWebPhase.NOT_INSTALLED) {
+                    appViewModel.launchDshWeb { result ->
+                        if (result is DshWebLaunchResult.Failed) {
                             Toast.makeText(
                                 context,
                                 result.message(context),
@@ -238,10 +238,10 @@ fun AgentAppRoot(
                     pushRoute(AppRoute.LinuxEnvironment)
                 }
             },
-            kimiWebLabel = appViewModel.kimiWebState.actionLabel(context),
-            canStopKimiWeb = appViewModel.kimiWebState.canStop,
-            onStopKimiWeb = appViewModel::stopKimiWeb,
-            onRefreshKimiWeb = appViewModel::refreshKimiWeb,
+            dshWebLabel = appViewModel.dshWebState.actionLabel(context),
+            canStopDshWeb = appViewModel.dshWebState.canStop,
+            onStopDshWeb = appViewModel::stopDshWeb,
+            onRefreshDshWeb = appViewModel::refreshDshWeb,
             onOpenBrowser = { pushRoute(AppRoute.Browser) },
             onSelectConversation = { conversationId -> selectConversation(conversationId) },
             onConversationRename = { conversation ->

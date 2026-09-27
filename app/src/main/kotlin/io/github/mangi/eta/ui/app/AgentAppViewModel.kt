@@ -28,7 +28,7 @@ internal class AgentAppViewModel(application: Application) : AndroidViewModel(ap
     private val terminalHost = TerminalSessionHost.get(application)
     val terminalStore = terminalHost.terminal
     val consoleStore = terminalHost.console
-    val kimiWebLauncher = KimiWebLauncher(
+    val dshWebLauncher = DshWebLauncher(
         context = application,
         daemonSupervisor = DetachedTaskSupervisor(
             logger = AndroidAgentLogger,
@@ -42,61 +42,61 @@ internal class AgentAppViewModel(application: Application) : AndroidViewModel(ap
         ),
     )
 
-    var kimiWebState by mutableStateOf(KimiWebUiState())
+    var dshWebState by mutableStateOf(DshWebUiState())
         private set
-    private var kimiWebJob: Job? = null
+    private var dshWebJob: Job? = null
 
-    fun refreshKimiWeb() {
-        if (kimiWebJob?.isActive == true) return
+    fun refreshDshWeb() {
+        if (dshWebJob?.isActive == true) return
         viewModelScope.launch {
             val status = withContext(Dispatchers.IO) {
                 val distribution = LinuxEnvironmentSettingsRepository.current(getApplication())
                 val rootfs = LinuxEnvironmentPaths.rootfsDir(getApplication(), distribution)
-                if (!linuxPackageProfileReady(rootfs, LinuxPackageProfiles.KIMI)) {
-                    KimiWebUiState(KimiWebPhase.NOT_INSTALLED)
+                if (!linuxPackageProfileReady(rootfs, LinuxPackageProfiles.DSH)) {
+                    DshWebUiState(DshWebPhase.NOT_INSTALLED)
                 } else {
-                    val runtime = kimiWebLauncher.status(distribution.terminalEnvironment)
+                    val runtime = dshWebLauncher.status(distribution.terminalEnvironment)
                     when {
-                        runtime.running -> KimiWebUiState(KimiWebPhase.RUNNING)
-                        runtime.code != null -> KimiWebUiState(KimiWebPhase.FAILED, runtime.code)
-                        kimiWebState.phase == KimiWebPhase.FAILED -> kimiWebState
-                        else -> KimiWebUiState(KimiWebPhase.READY)
+                        runtime.running -> DshWebUiState(DshWebPhase.RUNNING)
+                        runtime.code != null -> DshWebUiState(DshWebPhase.FAILED, runtime.code)
+                        dshWebState.phase == DshWebPhase.FAILED -> dshWebState
+                        else -> DshWebUiState(DshWebPhase.READY)
                     }
                 }
             }
-            if (kimiWebJob?.isActive != true) kimiWebState = status
+            if (dshWebJob?.isActive != true) dshWebState = status
         }
     }
 
-    fun launchKimiWeb(onFinished: (KimiWebLaunchResult) -> Unit) {
-        if (kimiWebJob?.isActive == true) return
-        kimiWebState = KimiWebUiState(KimiWebPhase.STARTING)
-        kimiWebJob = viewModelScope.launch {
+    fun launchDshWeb(onFinished: (DshWebLaunchResult) -> Unit) {
+        if (dshWebJob?.isActive == true) return
+        dshWebState = DshWebUiState(DshWebPhase.STARTING)
+        dshWebJob = viewModelScope.launch {
             val distribution = LinuxEnvironmentSettingsRepository.current(getApplication())
             val result = try {
-                kimiWebLauncher.launch(distribution.terminalEnvironment)
+                dshWebLauncher.launch(distribution.terminalEnvironment)
             } finally {
-                if (kimiWebState.phase == KimiWebPhase.STARTING) kimiWebState = KimiWebUiState(KimiWebPhase.READY)
+                if (dshWebState.phase == DshWebPhase.STARTING) dshWebState = DshWebUiState(DshWebPhase.READY)
             }
-            kimiWebState = when (result) {
-                is KimiWebLaunchResult.Opened -> KimiWebUiState(KimiWebPhase.RUNNING)
-                is KimiWebLaunchResult.Failed -> KimiWebUiState(KimiWebPhase.FAILED, result.code)
+            dshWebState = when (result) {
+                is DshWebLaunchResult.Opened -> DshWebUiState(DshWebPhase.RUNNING)
+                is DshWebLaunchResult.Failed -> DshWebUiState(DshWebPhase.FAILED, result.code)
             }
             onFinished(result)
         }
     }
 
-    fun stopKimiWeb() {
-        val preparation = kimiWebJob
+    fun stopDshWeb() {
+        val preparation = dshWebJob
         preparation?.cancel()
-        kimiWebJob = viewModelScope.launch {
+        dshWebJob = viewModelScope.launch {
             preparation?.join()
             val distribution = LinuxEnvironmentSettingsRepository.current(getApplication())
-            val status = kimiWebLauncher.status(distribution.terminalEnvironment)
+            val status = dshWebLauncher.status(distribution.terminalEnvironment)
             val stopped = if (status.taskId == null) status.code == null
-                else kimiWebLauncher.stop(distribution.terminalEnvironment)
-            kimiWebState = if (stopped) KimiWebUiState(KimiWebPhase.READY)
-                else KimiWebUiState(KimiWebPhase.FAILED, status.code ?: "STOP_FAILED")
+                else dshWebLauncher.stop(distribution.terminalEnvironment)
+            dshWebState = if (stopped) DshWebUiState(DshWebPhase.READY)
+                else DshWebUiState(DshWebPhase.FAILED, status.code ?: "STOP_FAILED")
         }
     }
 }

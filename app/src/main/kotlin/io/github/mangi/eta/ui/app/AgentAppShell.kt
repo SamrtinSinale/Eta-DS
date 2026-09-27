@@ -69,11 +69,11 @@ fun AgentAppShell(
     onSearchConversations: (String) -> Unit,
     onNewConversation: () -> Unit,
     onOpenTerminal: () -> Unit,
-    onLaunchKimiWeb: () -> Unit,
-    kimiWebLabel: String,
-    canStopKimiWeb: Boolean,
-    onStopKimiWeb: () -> Unit,
-    onRefreshKimiWeb: () -> Unit,
+    onLaunchDshWeb: () -> Unit,
+    dshWebLabel: String,
+    canStopDshWeb: Boolean,
+    onStopDshWeb: () -> Unit,
+    onRefreshDshWeb: () -> Unit,
     onOpenBrowser: () -> Unit,
     onSelectConversation: (String) -> Unit,
     onConversationRename: (ConversationSummaryUi) -> Unit,
@@ -108,11 +108,11 @@ fun AgentAppShell(
                             onOpenConversationPane = onOpenConversationPane,
                             onNewConversation = onNewConversation,
                             onOpenTerminal = onOpenTerminal,
-                            onLaunchKimiWeb = onLaunchKimiWeb,
-                            kimiWebLabel = kimiWebLabel,
-                            canStopKimiWeb = canStopKimiWeb,
-                            onStopKimiWeb = onStopKimiWeb,
-                            onRefreshKimiWeb = onRefreshKimiWeb,
+                            onLaunchDshWeb = onLaunchDshWeb,
+                            dshWebLabel = dshWebLabel,
+                            canStopDshWeb = canStopDshWeb,
+                            onStopDshWeb = onStopDshWeb,
+                            onRefreshDshWeb = onRefreshDshWeb,
                             onOpenBrowser = onOpenBrowser,
                         )
                     }
@@ -167,11 +167,11 @@ private fun AgentTopBar(
     onOpenConversationPane: () -> Unit,
     onNewConversation: () -> Unit,
     onOpenTerminal: () -> Unit,
-    onLaunchKimiWeb: () -> Unit,
-    kimiWebLabel: String,
-    canStopKimiWeb: Boolean,
-    onStopKimiWeb: () -> Unit,
-    onRefreshKimiWeb: () -> Unit,
+    onLaunchDshWeb: () -> Unit,
+    dshWebLabel: String,
+    canStopDshWeb: Boolean,
+    onStopDshWeb: () -> Unit,
+    onRefreshDshWeb: () -> Unit,
     onOpenBrowser: () -> Unit,
 ) {
     val isHome = route is AppRoute.Home
@@ -193,11 +193,11 @@ private fun AgentTopBar(
             TopBarOverflowMenu(
                 onNewConversation = onNewConversation,
                 onOpenTerminal = onOpenTerminal,
-                onLaunchKimiWeb = onLaunchKimiWeb,
-                kimiWebLabel = kimiWebLabel,
-                canStopKimiWeb = canStopKimiWeb,
-                onStopKimiWeb = onStopKimiWeb,
-                onRefreshKimiWeb = onRefreshKimiWeb,
+                onLaunchDshWeb = onLaunchDshWeb,
+                dshWebLabel = dshWebLabel,
+                canStopDshWeb = canStopDshWeb,
+                onStopDshWeb = onStopDshWeb,
+                onRefreshDshWeb = onRefreshDshWeb,
                 onOpenBrowser = onOpenBrowser,
             )
         }
@@ -233,16 +233,16 @@ private val TopBarMenuIconSize = 20.dp
 private fun TopBarOverflowMenu(
     onNewConversation: () -> Unit,
     onOpenTerminal: () -> Unit,
-    onLaunchKimiWeb: () -> Unit,
-    kimiWebLabel: String,
-    canStopKimiWeb: Boolean,
-    onStopKimiWeb: () -> Unit,
-    onRefreshKimiWeb: () -> Unit,
+    onLaunchDshWeb: () -> Unit,
+    dshWebLabel: String,
+    canStopDshWeb: Boolean,
+    onStopDshWeb: () -> Unit,
+    onRefreshDshWeb: () -> Unit,
     onOpenBrowser: () -> Unit,
 ) {
     var showMenu by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { onRefreshKimiWeb(); showMenu = true }) {
+        IconButton(onClick = { onRefreshDshWeb(); showMenu = true }) {
             Icon(
                 imageVector = Icons.Outlined.MoreHoriz,
                 modifier = Modifier.size(24.dp),
@@ -256,16 +256,16 @@ private fun TopBarOverflowMenu(
         ) {
             val newConversationText = stringResource(R.string.action_new_conversation)
             val openTerminalText = stringResource(R.string.action_open_terminal)
-            val launchKimiWebText = kimiWebLabel
-            val stopKimiWebText = stringResource(R.string.capability_kimi_stop)
+            val launchDshWebText = dshWebLabel
+            val stopDshWebText = stringResource(R.string.capability_dsh_stop)
             val openBrowserText = stringResource(R.string.action_open_browser)
             val menuItems = remember(
                 newConversationText,
                 openTerminalText,
-                launchKimiWebText,
+                launchDshWebText,
                 openBrowserText,
-                stopKimiWebText,
-                canStopKimiWeb,
+                stopDshWebText,
+                canStopDshWeb,
             ) {
                 listOf(
                     DropdownItem(
@@ -289,7 +289,7 @@ private fun TopBarOverflowMenu(
                         },
                     ),
                     DropdownItem(
-                        text = launchKimiWebText,
+                        text = launchDshWebText,
                         icon = { modifier ->
                             Icon(
                                 painter = painterResource(R.drawable.ic_kimi_code),
@@ -308,7 +308,7 @@ private fun TopBarOverflowMenu(
                             )
                         },
                     ),
-                ) + if (canStopKimiWeb) listOf(DropdownItem(text = stopKimiWebText)) else emptyList()
+                ) + if (canStopDshWeb) listOf(DropdownItem(text = stopDshWebText)) else emptyList()
             }
             ListPopupColumn {
                 menuItems.forEachIndexed { index, item ->
@@ -322,9 +322,9 @@ private fun TopBarOverflowMenu(
                             when (index) {
                                 0 -> onNewConversation()
                                 1 -> onOpenTerminal()
-                                2 -> onLaunchKimiWeb()
+                                2 -> onLaunchDshWeb()
                                 3 -> onOpenBrowser()
-                                4 -> onStopKimiWeb()
+                                4 -> onStopDshWeb()
                             }
                         },
                     )

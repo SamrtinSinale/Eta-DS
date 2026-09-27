@@ -16,28 +16,28 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-internal data class KimiWebRuntimeStatus(
+internal data class DshWebRuntimeStatus(
     val taskId: String? = null,
     val running: Boolean = false,
     val url: String? = null,
     val code: String? = null,
 )
 
-internal sealed interface KimiWebLaunchResult {
-    data class Opened(val url: String) : KimiWebLaunchResult
-    data class Failed(val code: String) : KimiWebLaunchResult
+internal sealed interface DshWebLaunchResult {
+    data class Opened(val url: String) : DshWebLaunchResult
+    data class Failed(val code: String) : DshWebLaunchResult
 }
 
 /** 取得启动期前台引用，解析带 token 的本机地址后交给系统浏览器。 */
-internal class KimiWebLauncher(
+internal class DshWebLauncher(
     private val context: Context,
     private val daemonSupervisor: DetachedTaskSupervisor,
 ) {
-    private val session = KimiWebSession(
-        tasks = object : KimiWebSession.Tasks {
+    private val session = DshWebSession(
+        tasks = object : DshWebSession.Tasks {
             override fun list() = daemonSupervisor.list()
             override fun start(environment: TerminalEnvironment, identity: String) = daemonSupervisor.start(
-                command = KimiWebSession.COMMAND, cwd = "/workspace", identity = identity, environment = environment,
+                command = DshWebSession.COMMAND, cwd = "/workspace", identity = identity, environment = environment,
             )
             override fun logs(id: String) = daemonSupervisor.readLogs(id)
             override fun stop(id: String) { daemonSupervisor.stop(id) }
@@ -54,15 +54,16 @@ internal class KimiWebLauncher(
         },
     )
 
-    suspend fun launch(environment: TerminalEnvironment): KimiWebLaunchResult = launchMutex.withLock {
+    suspend fun launch(environment: TerminalEnvironment): DshWebLaunchResult = launchMutex.withLock {
         withContext(Dispatchers.IO) {
-            val distribution = environment.linuxDistribution ?: return@withContext KimiWebLaunchResult.Failed("INVALID_ENVIRONMENT")
+            val distribution = environment.linuxDistribution ?: return@withContext DshWebLaunchResult.Failed("INVALID_ENVIRONMENT")
             val rootfs = LinuxEnvironmentPaths.rootfsDir(context, distribution)
-            if (!LinuxEnvironmentPaths.rootfsReady(rootfs.absolutePath)) return@withContext KimiWebLaunchResult.Failed("LINUX_ENVIRONMENT_NOT_READY")
+            if (!LinuxEnvironmentPaths.rootfsReady(rootfs.absolutePath)) return@withContext DshWebLaunchResult.Failed("LINUX_ENVIRONMENT_NOT_READY")
+            DshMcpBridge.prepare(context, distribution)
             val identity = TerminalRuntime.defaultIdentity(environment, rootfs.absolutePath)
             val job = currentCoroutineContext().job
             if (identity == "user" && !AgentExecutionService.acquire(context, LAUNCH_ID) { job.cancel() }) {
-                return@withContext KimiWebLaunchResult.Failed("BACKGROUND_START_NOT_ALLOWED")
+                return@withContext DshWebLaunchResult.Failed("BACKGROUND_START_NOT_ALLOWED")
             }
             try {
                 currentCoroutineContext().ensureActive()
@@ -73,22 +74,22 @@ internal class KimiWebLauncher(
         }
     }
 
-    suspend fun status(environment: TerminalEnvironment): KimiWebRuntimeStatus = withContext(Dispatchers.IO) {
-        val distribution = environment.linuxDistribution ?: return@withContext KimiWebRuntimeStatus(code = "INVALID_ENVIRONMENT")
+    suspend fun status(environment: TerminalEnvironment): DshWebRuntimeStatus = withContext(Dispatchers.IO) {
+        val distribution = environment.linuxDistribution ?: return@withContext DshWebRuntimeStatus(code = "INVALID_ENVIRONMENT")
         val rootfs = LinuxEnvironmentPaths.rootfsDir(context, distribution)
-        if (!LinuxEnvironmentPaths.rootfsReady(rootfs.path)) return@withContext KimiWebRuntimeStatus(code = "LINUX_ENVIRONMENT_NOT_READY")
+        if (!LinuxEnvironmentPaths.rootfsReady(rootfs.path)) return@withContext DshWebRuntimeStatus(code = "LINUX_ENVIRONMENT_NOT_READY")
         val identity = TerminalRuntime.defaultIdentity(environment, rootfs.path)
-        if (identity == "root" && !TerminalRuntime.rootAvailable) return@withContext KimiWebRuntimeStatus(code = "ROOT_REQUIRED")
+        if (identity == "root" && !TerminalRuntime.rootAvailable) return@withContext DshWebRuntimeStatus(code = "ROOT_REQUIRED")
         val matches = daemonSupervisor.list().filter {
             it.task.environment == environment && it.task.identity == identity &&
                 it.task.backend == LinuxEnvironmentPaths.backendOf(rootfs.path) &&
-                it.task.command.trim() in setOf(KimiWebSession.COMMAND, "kimi web")
+                it.task.command.trim() in setOf(DshWebSession.COMMAND, "kimi web")
         }
         val task = matches.lastOrNull { it.running } ?: matches.lastOrNull()
-            ?: return@withContext KimiWebRuntimeStatus()
-        if (!task.running) return@withContext KimiWebRuntimeStatus(taskId = task.task.id, code = "KIMI_EXITED")
+            ?: return@withContext DshWebRuntimeStatus()
+        if (!task.running) return@withContext DshWebRuntimeStatus(taskId = task.task.id, code = "DSH_EXITED")
         val logs = daemonSupervisor.readLogs(task.task.id)
-        KimiWebRuntimeStatus(task.task.id, true, if (logs.ok) KimiWebSession.addressFromLogs(logs.text) else null, if (logs.ok) null else logs.code)
+        DshWebRuntimeStatus(task.task.id, true, if (logs.ok) DshWebSession.addressFromLogs(logs.text) else null, if (logs.ok) null else logs.code)
     }
 
     suspend fun stop(environment: TerminalEnvironment): Boolean = launchMutex.withLock {

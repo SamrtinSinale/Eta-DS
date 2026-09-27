@@ -48,8 +48,8 @@ import io.github.mangi.eta.agent.terminal.SharedFolderMounts
 import io.github.mangi.eta.agent.terminal.terminalEnvironment
 import io.github.mangi.eta.core.AndroidAgentLogger
 import io.github.mangi.eta.data.repository.LinuxEnvironmentSettingsRepository
-import io.github.mangi.eta.ui.app.KimiWebLaunchResult
-import io.github.mangi.eta.ui.app.KimiWebLauncher
+import io.github.mangi.eta.ui.app.DshWebLaunchResult
+import io.github.mangi.eta.ui.app.DshWebLauncher
 import io.github.mangi.eta.ui.app.launchForegroundExecution
 import io.github.mangi.eta.ui.app.message
 import io.github.mangi.eta.ui.app.rememberDeviceCapabilities
@@ -76,7 +76,7 @@ private enum class InstallTarget {
     PYTHON,
     NODE,
     SSH,
-    KIMI,
+    DSH,
 }
 
 private data class PackageProfileUi(
@@ -114,11 +114,11 @@ private val packageProfileUis = listOf(
         readyRes = R.string.linux_ssh_tools_ready,
     ),
     PackageProfileUi(
-        target = InstallTarget.KIMI,
-        profile = LinuxPackageProfiles.KIMI,
-        titleRes = R.string.linux_kimi_tools,
-        summaryRes = R.string.linux_kimi_tools_summary,
-        readyRes = R.string.linux_kimi_tools_ready,
+        target = InstallTarget.DSH,
+        profile = LinuxPackageProfiles.DSH,
+        titleRes = R.string.linux_dsh_tools,
+        summaryRes = R.string.linux_dsh_tools_summary,
+        readyRes = R.string.linux_dsh_tools_ready,
     ),
 )
 
@@ -173,10 +173,10 @@ internal fun LinuxEnvironmentScreen(
         mutableStateOf(apkAnalysisInstaller.isReady())
     }
     var apkAnalysisProgress by remember { mutableStateOf<ApkAnalysisInstallProgress?>(null) }
-    var kimiWebLaunching by remember { mutableStateOf(false) }
-    var kimiWebRunning by remember(selectedDistribution, backend) { mutableStateOf(false) }
-    val kimiWebLauncher = remember(appContext) {
-        KimiWebLauncher(
+    var dshWebLaunching by remember { mutableStateOf(false) }
+    var dshWebRunning by remember(selectedDistribution, backend) { mutableStateOf(false) }
+    val dshWebLauncher = remember(appContext) {
+        DshWebLauncher(
             context = appContext,
             daemonSupervisor = DetachedTaskSupervisor(
                 logger = AndroidAgentLogger,
@@ -190,9 +190,9 @@ internal fun LinuxEnvironmentScreen(
             ),
         )
     }
-    LaunchedEffect(selectedDistribution, backend, kimiWebLaunching) {
-        if (!kimiWebLaunching) {
-            kimiWebRunning = kimiWebLauncher.status(selectedDistribution.terminalEnvironment).running
+    LaunchedEffect(selectedDistribution, backend, dshWebLaunching) {
+        if (!dshWebLaunching) {
+            dshWebRunning = dshWebLauncher.status(selectedDistribution.terminalEnvironment).running
         }
     }
     val selectedBaseReady = when (selectedDistribution) {
@@ -278,15 +278,15 @@ internal fun LinuxEnvironmentScreen(
     }
 
     /** Kimi 就绪后按钮变为启动 Web UI：守护任务常驻 kimi web，解析地址后拉起浏览器。 */
-    fun launchKimiWeb() {
-        if (kimiWebLaunching || requiresRoot) return
+    fun launchDshWeb() {
+        if (dshWebLaunching || requiresRoot) return
         requestExecutionNotifications()
-        kimiWebLaunching = true
+        dshWebLaunching = true
         resultMessage = null
         coroutineScope.launch {
-            val result = kimiWebLauncher.launch(selectedDistribution.terminalEnvironment)
-            kimiWebLaunching = false
-            if (result is KimiWebLaunchResult.Failed) {
+            val result = dshWebLauncher.launch(selectedDistribution.terminalEnvironment)
+            dshWebLaunching = false
+            if (result is DshWebLaunchResult.Failed) {
                 resultMessage = result.message(context)
             }
         }
@@ -315,7 +315,7 @@ internal fun LinuxEnvironmentScreen(
                 mode = backend.displayName(),
                 summary = when {
                     requiresRoot -> stringResource(R.string.capability_linux_root_lost)
-                    kimiWebLaunching -> stringResource(R.string.linux_kimi_web_starting)
+                    dshWebLaunching -> stringResource(R.string.linux_dsh_web_starting)
                     busyTarget != null -> activeProgress ?: stringResource(R.string.linux_installing)
                     selectedToolsReady -> stringResource(R.string.linux_environment_tools_ready)
                     selectedBaseReady -> stringResource(R.string.linux_environment_base_ready)
@@ -327,7 +327,7 @@ internal fun LinuxEnvironmentScreen(
                         },
                     )
                 },
-                busy = busyTarget != null || kimiWebLaunching,
+                busy = busyTarget != null || dshWebLaunching,
                 message = resultMessage,
                 actionText = when {
                     requiresRoot -> stringResource(R.string.capability_enhancements)
@@ -336,7 +336,7 @@ internal fun LinuxEnvironmentScreen(
                     selectedBaseReady -> stringResource(R.string.linux_install_base_tools)
                     else -> stringResource(R.string.linux_install_base)
                 },
-                actionEnabled = busyTarget == null && !kimiWebLaunching,
+                actionEnabled = busyTarget == null && !dshWebLaunching,
                 onAction = {
                     if (requiresRoot) onNavigate(AppRoute.SystemEnhance)
                     else if (selectedBaseReady) installTools() else installBase()
@@ -349,15 +349,15 @@ internal fun LinuxEnvironmentScreen(
                 distribution = selectedDistribution,
                 backend = backend,
                 rootGranted = capabilities.root.isGranted,
-                enabled = busyTarget == null && !kimiWebLaunching,
+                enabled = busyTarget == null && !dshWebLaunching,
                 onDistributionSelected = { distribution ->
-                    if (busyTarget == null && !kimiWebLaunching && distribution != selectedDistribution) {
+                    if (busyTarget == null && !dshWebLaunching && distribution != selectedDistribution) {
                         resultMessage = null
                         coroutineScope.launch { LinuxEnvironmentSettingsRepository.select(distribution) }
                     }
                 },
                 onBackendSelected = { selectedBackend ->
-                    if (busyTarget == null && !kimiWebLaunching && selectedBackend != backend &&
+                    if (busyTarget == null && !dshWebLaunching && selectedBackend != backend &&
                         (selectedBackend == LinuxExecutionBackend.PROOT || capabilities.root.isGranted)
                     ) {
                         resultMessage = null
@@ -406,7 +406,7 @@ internal fun LinuxEnvironmentScreen(
                 ) {
                     packageProfileUis.forEachIndexed { index, profileUi ->
                         val ready = profileReady[profileUi.target] == true
-                        val isKimi = profileUi.target == InstallTarget.KIMI
+                        val isDsh = profileUi.target == InstallTarget.DSH
                         val summaryRes = if (selectedDistribution == LinuxDistribution.DEBIAN) {
                             profileUi.debianSummaryRes
                         } else {
@@ -428,41 +428,41 @@ internal fun LinuxEnvironmentScreen(
                                 stringResource(summaryRes)
                             },
                             endActions = {
-                                if (isKimi && kimiWebRunning) {
+                                if (isDsh && dshWebRunning) {
                                     EtaTextButton(
                                         text = stringResource(R.string.action_stop),
-                                        enabled = !kimiWebLaunching && !requiresRoot,
+                                        enabled = !dshWebLaunching && !requiresRoot,
                                         onClick = {
                                             coroutineScope.launch {
-                                                val stopped = kimiWebLauncher.stop(selectedDistribution.terminalEnvironment)
-                                                kimiWebRunning = !stopped
+                                                val stopped = dshWebLauncher.stop(selectedDistribution.terminalEnvironment)
+                                                dshWebRunning = !stopped
                                             }
                                         },
                                     )
                                 }
                                 EtaTextButton(
                                     text = when {
-                                        isKimi && ready -> stringResource(
-                                            if (kimiWebLaunching) {
-                                                R.string.linux_kimi_web_starting
-                                            } else if (kimiWebRunning) {
+                                        isDsh && ready -> stringResource(
+                                            if (dshWebLaunching) {
+                                                R.string.linux_dsh_web_starting
+                                            } else if (dshWebRunning) {
                                                 R.string.action_open
                                             } else {
-                                                R.string.linux_kimi_web_launch
+                                                R.string.linux_dsh_web_launch
                                             },
                                         )
                                         ready -> stringResource(R.string.linux_installed)
                                         busyTarget == profileUi.target -> stringResource(R.string.linux_installing)
                                         else -> stringResource(R.string.linux_install)
                                     },
-                                    enabled = !requiresRoot && if (isKimi && ready) {
-                                        !kimiWebLaunching && busyTarget == null
+                                    enabled = !requiresRoot && if (isDsh && ready) {
+                                        !dshWebLaunching && busyTarget == null
                                     } else {
                                         busyTarget == null && !ready
                                     },
                                     onClick = {
-                                        if (isKimi && ready) {
-                                            launchKimiWeb()
+                                        if (isDsh && ready) {
+                                            launchDshWeb()
                                             return@EtaTextButton
                                         }
                                         if (busyTarget != null || ready) return@EtaTextButton

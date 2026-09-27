@@ -103,22 +103,22 @@ internal object LinuxPackageProfiles {
      * 始终安装最新正式版（升级重装即可）；--prefix /usr/local 让 kimi 进入 PATH 首位，
      * 与 Node 归档自身的 prefix 无关。国内镜像优先，官方 registry 兜底。
      */
-    private const val KIMI_INSTALL_SCRIPT =
-        "npm install -g --prefix /usr/local --registry=https://registry.npmmirror.com " +
-            "@moonshot-ai/kimi-code@latest || " +
-            "npm install -g --prefix /usr/local @moonshot-ai/kimi-code@latest"
+    private const val DSH_INSTALL_SCRIPT =
+        "npm install -g --prefix /usr/local --allow-scripts=@deepseek-ai/dsh-subprocess-local,koffi,node-pty,@google/genai,protobufjs --registry=https://registry.npmmirror.com " +
+            "@deepseek-ai/dsh@latest || " +
+            "npm install -g --prefix /usr/local @deepseek-ai/dsh@latest"
 
-    val KIMI = LinuxPackageProfile(
-        id = "kimi",
-        markerName = AlpineEnvironmentPaths.KIMI_TOOLS_MARKER,
-        revision = AlpineEnvironmentPaths.KIMI_TOOLS_REVISION,
+    val DSH = LinuxPackageProfile(
+        id = "dsh",
+        markerName = AlpineEnvironmentPaths.DSH_TOOLS_MARKER,
+        revision = AlpineEnvironmentPaths.DSH_TOOLS_REVISION,
         dependsOn = NODE,
         specs = mapOf(
-            LinuxDistribution.ALPINE to LinuxPackageSpec(setupScript = KIMI_INSTALL_SCRIPT),
-            LinuxDistribution.DEBIAN to LinuxPackageSpec(setupScript = KIMI_INSTALL_SCRIPT),
+            LinuxDistribution.ALPINE to LinuxPackageSpec(setupScript = DSH_INSTALL_SCRIPT),
+            LinuxDistribution.DEBIAN to LinuxPackageSpec(setupScript = DSH_INSTALL_SCRIPT),
         ),
     )
-    val ALL = listOf(PYTHON, NODE, SSH, KIMI)
+    val ALL = listOf(PYTHON, NODE, SSH, DSH)
 }
 
 internal fun linuxPackageProfileReady(rootfs: File, profile: LinuxPackageProfile): Boolean {
@@ -211,7 +211,7 @@ internal class LinuxPackageProfileInstaller(
         val activateCommand = buildString {
             append("set -e\n")
             spec.setupScript?.let { script -> append(script).append('\n') }
-            if (profile == LinuxPackageProfiles.KIMI) append("kimi --version >/dev/null\nkimi web --help >/dev/null\n")
+            if (profile == LinuxPackageProfiles.DSH) append("dsh --version >/dev/null\ndsh web --help >/dev/null\n")
             append("cat > /").append(profile.markerName).append(" <<'ETA_PROFILE_EOF'\n")
             append("profile=").append(profile.revision).append('\n')
             append("ETA_PROFILE_EOF\n")

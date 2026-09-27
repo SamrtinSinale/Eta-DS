@@ -3,6 +3,7 @@ package io.github.mangi.eta
 import android.app.Application
 import android.os.Handler
 import android.os.Looper
+import io.github.mangi.eta.agent.mcp.AgentToolServerHost
 import io.github.mangi.eta.agent.skill.SkillRuntime
 import io.github.mangi.eta.agent.device.RootAccess
 import io.github.mangi.eta.agent.terminal.TerminalRuntime
@@ -60,6 +61,13 @@ class EtaApp : Application(), XposedServiceHelper.OnServiceListener {
         XposedServiceHelper.registerListener(this)
         applicationScope.launch {
             LinuxEnvironmentSettingsRepository.initialize(this@EtaApp)
+            runCatching {
+                AgentToolServerHost.ensureStarted(this@EtaApp)
+            }.onFailure { throwable ->
+                AndroidAgentLogger.warn(
+                    "Agent tool server start failed: type=${throwable.safeLogType()}"
+                )
+            }
             runCatching {
                 SkillRuntime.createIndexService(this@EtaApp).listInstalledSkills()
             }.onFailure { throwable ->
