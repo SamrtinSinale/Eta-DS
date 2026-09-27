@@ -371,6 +371,11 @@ internal class AgentRuntimeService : Service(), LifecycleOwner, SavedStateRegist
         session: AgentRuntimeSession,
         request: AgentRuntimeWire.RunRequest,
     ) {
+        val dshRuntime = io.github.mangi.eta.agent.dsh.DshAcpRuntime.create(this, request)
+        if (dshRuntime != null) {
+            dshRuntime.execute(session, request)
+            return
+        }
         val outcome = AgentRuntimeRunExecutor(
             context = this,
             currentPermissions = ::currentRuntimePermissions,

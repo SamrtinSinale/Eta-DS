@@ -63,6 +63,7 @@ class EtaApp : Application(), XposedServiceHelper.OnServiceListener {
             LinuxEnvironmentSettingsRepository.initialize(this@EtaApp)
             runCatching {
                 AgentToolServerHost.ensureStarted(this@EtaApp)
+                io.github.mangi.eta.agent.dsh.DshRuntimeInstaller.ensureInstalled(this@EtaApp)
             }.onFailure { throwable ->
                 AndroidAgentLogger.warn(
                     "Agent tool server start failed: type=${throwable.safeLogType()}"
