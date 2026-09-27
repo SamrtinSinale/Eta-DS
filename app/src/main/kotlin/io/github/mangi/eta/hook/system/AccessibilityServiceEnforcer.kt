@@ -206,7 +206,7 @@ internal class AccessibilityServiceEnforcer(
                 )
                 packageReceiverRegistered = true
             } catch (failure: RuntimeException) {
-                logFailure("无法监听 Eta 包变化", failure)
+                logFailure("无法监听 Eda 包变化", failure)
             }
         }
 
@@ -260,7 +260,7 @@ internal class AccessibilityServiceEnforcer(
                 packageReceiver?.let(context::unregisterReceiver)
                 packageReceiverRegistered = false
             } catch (failure: RuntimeException) {
-                logFailure("无法注销 Eta 包监听", failure)
+                logFailure("无法注销 Eda 包监听", failure)
             }
         }
         if (lifecycleReceiverRegistered) {
@@ -536,7 +536,7 @@ internal class AccessibilityServiceEnforcer(
             )
         ) {
             repairInProgress.set(false)
-            logFailure("无法临时关闭 Eta 无障碍服务")
+            logFailure("无法临时关闭 Eda 无障碍服务")
             return
         }
 
@@ -549,7 +549,7 @@ internal class AccessibilityServiceEnforcer(
             }
         ) {
             repairInProgress.set(false)
-            logFailure("无法调度 Eta 无障碍服务重启")
+            logFailure("无法调度 Eda 无障碍服务重启")
             schedule(context, "repair_schedule_failed", delayMs = 0L)
         }
     }
@@ -563,7 +563,7 @@ internal class AccessibilityServiceEnforcer(
                 enforce(context, "repair_${attempt.number}")
             }
         } catch (failure: RuntimeException) {
-            logFailure("无法重新启用 Eta 无障碍服务", failure)
+            logFailure("无法重新启用 Eda 无障碍服务", failure)
         } finally {
             repairInProgress.set(false)
         }
@@ -739,7 +739,7 @@ internal class AccessibilityServiceEnforcer(
         } catch (_: PackageManager.NameNotFoundException) {
             return false
         } catch (failure: RuntimeException) {
-            logFailure("无法校验 Eta 无障碍服务组件", failure)
+            logFailure("无法校验 Eda 无障碍服务组件", failure)
             return false
         }
         val applicationInfo = serviceInfo.applicationInfo
@@ -811,7 +811,7 @@ internal class AccessibilityServiceEnforcer(
         if (lastRestoreLogAt != 0L && now - lastRestoreLogAt < LOG_INTERVAL_MS) return
         lastRestoreLogAt = now
         logger.info(
-            "已恢复 Eta 无障碍: reason=$reason " +
+            "已恢复 Eda 无障碍: reason=$reason " +
                 "serviceList=$restoredServices masterSwitch=$restoredMasterSwitch",
         )
     }

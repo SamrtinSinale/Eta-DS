@@ -22,7 +22,7 @@ internal fun assistantBindingFor(target: PowerAssistantTarget): AssistantBinding
         target = target,
         packageName = ModuleConfig.ETA_PACKAGE,
         componentName = ModuleConfig.ETA_VOICE_INTERACTION_COMPONENT,
-        displayName = "Eta",
+        displayName = "Eda",
     )
 }
 

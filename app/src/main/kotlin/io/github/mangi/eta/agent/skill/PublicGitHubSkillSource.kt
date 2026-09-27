@@ -517,7 +517,7 @@ internal class PublicGitHubSkillSource(
         const val SKILL_FILE_NAME = "SKILL.md"
         const val API_HOST = "api.github.com"
         const val CODELOAD_HOST = "codeload.github.com"
-        const val USER_AGENT = "Eta-Skill-Installer"
+        const val USER_AGENT = "Eda-Skill-Installer"
         const val GITHUB_API_VERSION = "2022-11-28"
         const val MAX_CANDIDATES = 200
         const val MAX_METADATA_RESPONSE_BYTES = 1L * 1024 * 1024

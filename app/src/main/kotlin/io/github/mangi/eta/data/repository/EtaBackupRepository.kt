@@ -184,7 +184,7 @@ internal object EtaBackupRepository {
 
     private fun validate(document: EtaBackupDocument) {
         if (document.format != EtaBackupDocument.FORMAT) {
-            throw EtaBackupException("这不是 Eta 备份文件")
+            throw EtaBackupException("这不是 Eda 备份文件")
         }
         if (document.schemaVersion !in 1..EtaBackupDocument.SCHEMA_VERSION) {
             throw EtaBackupException("不支持的 Eta 备份版本：${document.schemaVersion}")

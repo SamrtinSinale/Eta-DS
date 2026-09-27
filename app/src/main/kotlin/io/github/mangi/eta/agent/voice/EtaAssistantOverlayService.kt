@@ -87,7 +87,7 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
     private val savedStateRegistryController = SavedStateRegistryController.create(this)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val cancellationExecutor = Executors.newSingleThreadExecutor { runnable ->
-        Thread(runnable, "EtaAssistantRuntimeCancel")
+        Thread(runnable, "EdaAssistantRuntimeCancel")
     }
     private val runtimeClient = AgentRuntimeClient(this, AndroidAgentLogger)
     private val runMessageProjector = AgentRunMessageProjector()
@@ -202,7 +202,7 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
         if (!Settings.canDrawOverlays(this)) {
             EtaAssistantScreenContexts.release(screenContextId)
             AndroidAgentLogger.warnThrottled("eta_assistant_overlay_permission_missing") {
-                "Eta assistant overlay permission is missing"
+                "Eda assistant overlay permission is missing"
             }
             stopSelf()
             return
@@ -329,7 +329,7 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING or
                 WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
-            title = "EtaAssistantOverlay"
+            title = "EdaAssistantOverlay"
         }
         runCatching { wm.addView(view, params) }.onFailure { throwable ->
             AndroidAgentLogger.warnThrottled("eta_assistant_overlay_add_failed") {
@@ -358,7 +358,7 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
         unregisterSystemBackCallback()
         val dispatcher = view.findOnBackInvokedDispatcher()
         if (dispatcher == null) {
-            AndroidAgentLogger.warn("Eta assistant overlay back dispatcher unavailable")
+            AndroidAgentLogger.warn("Eda assistant overlay back dispatcher unavailable")
             return
         }
         val callback = OnBackInvokedCallback(::dismissAndStop)
@@ -920,7 +920,7 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
     private fun openConversation() {
         if (handoffInProgress || activeRunId != null || uiState.messages.isEmpty()) return
         handoffInProgress = true
-        AndroidAgentLogger.info("Eta assistant handoff requested")
+        AndroidAgentLogger.info("Eda assistant handoff requested")
         updateSoftInput(visible = false)
         val intent = Intent(this, MainActivity::class.java)
             .setAction(ACTION_OPEN_CONVERSATION)
@@ -955,13 +955,13 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
         runCatching { pendingIntent.send(senderOptions.toBundle()) }
             .onFailure {
                 handoffInProgress = false
-                AndroidAgentLogger.warn("Eta assistant handoff activity launch failed")
+                AndroidAgentLogger.warn("Eda assistant handoff activity launch failed")
                 return
             }
         scope.launch(Dispatchers.Main.immediate) {
             delay(HANDOFF_TIMEOUT_MS)
             if (handoffInProgress) {
-                AndroidAgentLogger.warn("Eta assistant handoff timed out waiting for chat")
+                AndroidAgentLogger.warn("Eda assistant handoff timed out waiting for chat")
                 handoffInProgress = false
             }
         }
@@ -970,7 +970,7 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
     private fun finishHandoff() {
         if (!handoffInProgress) return
         if (handoffExitRequested) return
-        AndroidAgentLogger.info("Eta assistant handoff chat ready")
+        AndroidAgentLogger.info("Eda assistant handoff chat ready")
         handoffExitRequested = true
         scope.launch(Dispatchers.Main.immediate) {
             delay(HANDOFF_EXIT_DURATION_MS)

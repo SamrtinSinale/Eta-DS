@@ -28,7 +28,7 @@ android {
     ndkVersion = libs.versions.ndk.get()
 
     defaultConfig {
-        applicationId = "io.github.mangi.eta"
+        applicationId = "io.sartin.eats"
         minSdk = 34
         targetSdk = 36
         // versionCode 规则：yyyyMMdd + 两位当日序号（01 起），发版时随 versionName 一起手动递增。

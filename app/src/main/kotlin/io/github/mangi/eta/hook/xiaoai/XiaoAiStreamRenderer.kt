@@ -37,7 +37,7 @@ internal class XiaoAiStreamRenderer(
             is AgentEvent.RunStarted,
             is AgentEvent.ProviderRequestStarted,
             is AgentEvent.ProviderResponseStarted -> render(
-                text(R.string.injected_reasoning, "Eta is reasoning…"),
+                text(R.string.injected_reasoning, "Eda is reasoning…"),
             )
 
             is AgentEvent.AssistantBlockStart -> {
@@ -57,7 +57,7 @@ internal class XiaoAiStreamRenderer(
 
             is AgentEvent.ToolStarted -> {
                 if (synchronized(streamedText) { streamedText.isEmpty() }) {
-                    render(text(R.string.injected_executing, "Eta is working…"))
+                    render(text(R.string.injected_executing, "Eda is working…"))
                 }
             }
 
@@ -68,7 +68,7 @@ internal class XiaoAiStreamRenderer(
     fun complete(content: String) {
         if (cancelled.get()) return
         val finalText = content.trim().ifBlank {
-            text(R.string.injected_completed, "Eta completed this task")
+            text(R.string.injected_completed, "Eda completed this task")
         }
         render(finalText, immediate = true)
         mainHandler.post {
@@ -81,7 +81,7 @@ internal class XiaoAiStreamRenderer(
         render(
             text(
                 R.string.injected_failed,
-                "Eta could not complete the task. Try again later",
+                "Eda could not complete the task. Try again later",
             ),
             immediate = true,
         )

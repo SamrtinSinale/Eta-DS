@@ -521,7 +521,7 @@ internal class AgentStructuredDeviceTools(
 
     private fun listenerNotifications(packageFilter: String, limit: Int): String {
         if (!AgentNotificationHistoryService.isEnabled(context)) {
-            return error("NOTIFICATION_ACCESS_REQUIRED", "请先在权限健康页授予 Eta 通知使用权")
+            return error("NOTIFICATION_ACCESS_REQUIRED", "请先在权限健康页授予 Eda 通知使用权")
         }
         val notifications = AgentNotificationHistoryService.currentNotifications()
             ?: return error("NOTIFICATION_LISTENER_UNAVAILABLE", "通知服务尚未连接，请稍后重试")

@@ -8,7 +8,7 @@ internal object AgentBrowserToolCatalog {
         tools.put(
             AgentToolSchema.function(
                 name = "browser_use",
-                description = "操作 Eta 共享的离屏 Agent 浏览器，不会切换到外部浏览器。一次调用只执行一个 action；网页浏览通常先 navigate，再用 get_readable 提取正文，或用 find_elements 查找可交互元素。需要把 URI 显式交给外部应用时使用 open_uri。",
+                description = "操作 Eda 共享的离屏 Agent 浏览器，不会切换到外部浏览器。一次调用只执行一个 action；网页浏览通常先 navigate，再用 get_readable 提取正文，或用 find_elements 查找可交互元素。需要把 URI 显式交给外部应用时使用 open_uri。",
                 parameters = JSONObject()
                     .put("type", "object")
                     .put(

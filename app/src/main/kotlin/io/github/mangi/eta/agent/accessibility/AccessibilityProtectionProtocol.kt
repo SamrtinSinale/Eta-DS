@@ -17,7 +17,7 @@ internal object AccessibilityProtectionProtocol {
     const val ACTION_RECOVER =
         "io.github.mangi.eta.action.RECOVER_ACCESSIBILITY_SERVICE"
     const val PERMISSION =
-        "io.github.mangi.eta.permission.CONTROL_ACCESSIBILITY_PROTECTION"
+        "io.sartin.eats.permission.CONTROL_ACCESSIBILITY_PROTECTION"
     const val RECEIVER_PACKAGE = "android"
 
     const val EXTRA_PROTOCOL_VERSION = "protocol_version"
