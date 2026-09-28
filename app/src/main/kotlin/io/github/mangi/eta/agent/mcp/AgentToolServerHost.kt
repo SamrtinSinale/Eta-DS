@@ -3,7 +3,11 @@ package io.github.mangi.eta.agent.mcp
 import android.content.Context
 import android.util.Base64
 import android.util.Log
+import io.github.mangi.eta.agent.model.AgentHttpClient
 import io.github.mangi.eta.agent.model.AgentToolCatalog
+import io.github.mangi.eta.agent.skill.PublicGitHubSkillSource
+import io.github.mangi.eta.agent.skill.SkillCompatibilityChecker
+import io.github.mangi.eta.agent.skill.SkillRuntime
 import io.github.mangi.eta.agent.tool.AgentLocalTools
 import io.github.mangi.eta.agent.tool.AgentToolCapabilities
 import io.github.mangi.eta.core.AndroidAgentLogger
@@ -47,10 +51,24 @@ internal object AgentToolServerHost {
         server?.let { return it }
         val appContext = context.applicationContext
         val token = loadOrCreateToken(appContext)
+        // 外部内核（dsh）通过 MCP 调用 skills_* 工具，技能服务必须在这里一并接上；
+        // 之前没有传，读取/安装技能全部报"服务未初始化"。
+        val skillIndexService = SkillRuntime.createIndexService(appContext)
         val tools = AgentLocalTools(
             context = appContext,
             logger = AndroidAgentLogger,
             browserRunId = BROWSER_RUN_ID,
+            skillIndexService = skillIndexService,
+            skillLoader = SkillRuntime.createLoader(appContext),
+            skillResourceReader = SkillRuntime.createResourceReader(appContext),
+            githubSkillSource = PublicGitHubSkillSource(
+                cacheRoot = appContext.cacheDir,
+                baseClient = AgentHttpClient.client,
+            ),
+            skillPackageInstaller = SkillRuntime.createPackageInstaller(appContext),
+            runAvailableSkillIds = skillIndexService.listInstalledSkills()
+                .filter { SkillCompatibilityChecker.evaluate(it).available }
+                .mapTo(mutableSetOf()) { it.id },
         )
         val schemaProvider: () -> JSONArray = {
             AgentToolCatalog.build(

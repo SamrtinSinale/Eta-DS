@@ -152,14 +152,14 @@ internal data class DshRuntimeConfig(
         val lines = ArrayList<String>()
         lines += "Your working directory is {{cwd}}."
         lines += ""
-        lines += "你的技能库在 $SKILLS_IN_ROOT：每个技能是 <名字>/SKILL.md，任务开始前先对照下面的技能列表；"
-        lines += "任务与某个技能相符时，先读它的 SKILL.md 再执行；需要新技能时用 skills_list_curated / skills_inspect_github 找到，"
-        lines += "再通过 skills_install_from_github 安装——装好后会自动出现在本列表（下一轮生效）。"
+        lines += "技能库：dsh 自带技能在 /root/.dsh/skills；Eda 技能库在 $SKILLS_IN_ROOT（每个技能是 <名字>/SKILL.md，由 Eda App 管理）。"
+        lines += "任务与某个技能相符时，先读对应技能的 SKILL.md 再执行；需要新技能时用 skills_list_curated / skills_inspect_github 找到，"
+        lines += "再通过 skills_install_from_github 安装——装好后会同步进 Eda 技能库并自动可用。"
         val skills = skillIndex()
         if (skills.isEmpty()) {
             lines += "当前技能库为空。"
         } else {
-            lines += "可用技能："
+            lines += "Eda 技能库现有技能："
             skills.take(MAX_SKILL_LINES).forEach { (name, description) ->
                 lines += if (description.isBlank()) "- $name" else "- $name：$description"
             }
@@ -209,8 +209,8 @@ internal data class DshRuntimeConfig(
         private const val MCP_TRANSPORT_HTTP = "http"
         private const val OVERLAY_RELATIVE = "opt/dsh/eta-run-overlay.patch.yml"
         private const val OVERLAY_IN_ROOT = "/opt/dsh/eta-run-overlay.patch.yml"
-        private const val SKILLS_TARGET_REL = "root/.dsh/skills"
-        private const val SKILLS_IN_ROOT = "/root/.dsh/skills"
+        private const val SKILLS_TARGET_REL = "root/.agents/skills"
+        private const val SKILLS_IN_ROOT = "/root/.agents/skills"
         private const val MAX_SKILL_LINES = 40
         private const val MAX_SKILL_DESCRIPTION = 160
 
