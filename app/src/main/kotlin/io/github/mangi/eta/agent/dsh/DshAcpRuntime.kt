@@ -138,8 +138,8 @@ internal class DshAcpRuntime(
                                     round = round,
                                     toolCallId = toolCallId,
                                     name = call.name,
-                                    argsPreview = traceFormatter.summarizeArguments(call),
-                                    command = traceFormatter.displayCommand(call),
+                                    argsPreview = summarizeTool(call),
+                                    command = toolCommand(call),
                                 )
                             )
                         }
@@ -303,6 +303,44 @@ internal class DshAcpRuntime(
         return text.toString()
     }
 
+    /**
+     * 工具卡片的摘要。
+     *
+     * Eta 的摘要表只认自己的工具；dsh 自带的 bash/read/glob 一类会落到兜底文案
+     * （"准备执行"），于是界面上看不出它到底在干什么。
+     */
+    private fun summarizeTool(call: AgentModelClient.ToolCall): String {
+        val known = traceFormatter.summarizeArguments(call)
+        if (known != UNKNOWN_TOOL_LABEL) return known
+        val args = runCatching { JSONObject(call.argumentsJson) }.getOrNull() ?: JSONObject()
+        fun text(key: String) = args.optString(key).takeIf { it.isNotBlank() }
+        fun tail(path: String?) = path?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+        return when (call.name) {
+            "bash" -> "执行命令"
+            "glob" -> "查找文件" + (text("pattern")?.let { " · $it" } ?: "")
+            "grep" -> "搜索内容" + (text("pattern")?.let { " · $it" } ?: "")
+            "read" -> "读取文件" + (tail(text("file_path") ?: text("path"))?.let { " · $it" } ?: "")
+            "write" -> "写入文件" + (tail(text("file_path") ?: text("path"))?.let { " · $it" } ?: "")
+            "edit" -> "编辑文件" + (tail(text("file_path") ?: text("path"))?.let { " · $it" } ?: "")
+            "ls" -> "列出目录" + (tail(text("path"))?.let { " · $it" } ?: "")
+            "todo", "todo_write" -> "更新任务清单"
+            "job_list", "jobs" -> "查看后台任务"
+            "web_search" -> "搜索网页"
+            "web_fetch" -> "抓取网页"
+            "subagent" -> "派生子任务"
+            "ask_user" -> "询问用户"
+            else -> call.name
+        }
+    }
+
+    /** bash 的命令单独给一行，方便核对；Eta 自己的终端工具仍走原格式化器。 */
+    private fun toolCommand(call: AgentModelClient.ToolCall): String? =
+        traceFormatter.displayCommand(call) ?: runCatching {
+            if (call.name != "bash") return@runCatching null
+            JSONObject(call.argumentsJson).optString("command").trim()
+                .takeIf { it.isNotBlank() && it.length <= MAX_DISPLAY_COMMAND_CHARS }
+        }.getOrNull()
+
     private fun finishWithFailure(session: AgentRuntimeSession, reason: String) {
         session.emit(AgentEvent.RunFailed(reason = reason))
         session.complete(
@@ -322,6 +360,8 @@ internal class DshAcpRuntime(
         private const val UPDATE_TOOL_CALL = "tool_call"
         private const val UPDATE_TOOL_CALL_UPDATE = "tool_call_update"
         private const val UPDATE_USAGE = "usage_update"
+        private const val UNKNOWN_TOOL_LABEL = "准备执行"
+        private const val MAX_DISPLAY_COMMAND_CHARS = 600
         private const val MAX_HISTORY_MESSAGES = 20
         private const val MAX_HISTORY_CHARS_PER_MESSAGE = 800
         private const val PROMPT_ATTEMPTS = 4
