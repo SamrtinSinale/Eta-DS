@@ -152,7 +152,7 @@ internal class DshAcpRuntime(
                                         round = round,
                                         toolCallId = update.optString("toolCallId").ifBlank { update.optString("id") },
                                         name = bareToolName(update.optString("title").ifBlank { "tool" }),
-                                        resultSummary = update.optString("rawOutput").take(600),
+                                        resultSummary = toolResultText(update).take(600),
                                         imageCount = 0,
                                         imageBytes = 0,
                                         success = status == "completed",
@@ -283,6 +283,24 @@ internal class DshAcpRuntime(
             append("\n（历史结束）\n\n")
             append(text)
         }
+    }
+
+    /**
+     * dsh 的工具输出放在 content[] 里（形如 {type:"content", content:{type:"text", text:...}}），
+     * 它并没有 rawOutput 字段——之前读错字段，所以卡片上看不到任何结果，失败也没有原因。
+     */
+    private fun toolResultText(update: JSONObject): String {
+        val entries = update.optJSONArray("content") ?: return ""
+        val text = StringBuilder()
+        for (index in 0 until entries.length()) {
+            val entry = entries.optJSONObject(index) ?: continue
+            val block = entry.optJSONObject("content") ?: entry
+            val value = block.optString("text")
+            if (value.isBlank()) continue
+            if (text.isNotEmpty()) text.append('\n')
+            text.append(value)
+        }
+        return text.toString()
     }
 
     private fun finishWithFailure(session: AgentRuntimeSession, reason: String) {

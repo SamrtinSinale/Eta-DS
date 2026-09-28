@@ -82,7 +82,18 @@ internal data class DshRuntimeConfig(
             append(" DSH_PERMISSION_MODE=").append(PERMISSION_MODE)
             if (apiKey.isNotBlank()) append(" DEEPSEEK_API_KEY=").append(shellQuote(apiKey))
             if (baseUrl.isNotBlank()) append(" DEEPSEEK_BASE_URL=").append(shellQuote(baseUrl))
-            append("; exec chroot ").append(shellQuote(rootfsPath))
+            append("; ")
+            // dsh 的子进程走 node-pty，需要 /dev/ptmx 与 /dev/pts。运行时的 /dev 是空目录，
+            // 不挂进去的话 bash、ripgrep 这类子进程全部起不来（ENOENT / provider failure）。
+            // 挂载失败不阻断启动，只是那些工具会报错。
+            val devPtsPtmx = File(rootfsPath, "dev/pts/ptmx").absolutePath
+            append("if [ ! -e ").append(shellQuote(devPtsPtmx)).append(" ]; then ")
+            append("mount --rbind /dev ").append(shellQuote("$rootfsPath/dev")).append(" 2>/dev/null; fi; ")
+            // ripgrep 等程序要读 /proc/self/exe（glob 的排序就依赖它）。
+            val procSelf = File(rootfsPath, "proc/self").absolutePath
+            append("if [ ! -e ").append(shellQuote(procSelf)).append(" ]; then ")
+            append("mount -t proc proc ").append(shellQuote("$rootfsPath/proc")).append(" 2>/dev/null; fi; ")
+            append("exec chroot ").append(shellQuote(rootfsPath))
             append(' ').append(DshRuntimeInstaller.NODE_IN_ROOT)
             append(' ').append(DshRuntimeInstaller.DSH_ENTRY_IN_ROOT)
             append(" --profile ").append(ACP_PROFILE)

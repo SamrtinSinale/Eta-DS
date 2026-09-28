@@ -21,7 +21,7 @@ internal object DshRuntimeInstaller {
     private const val ASSET_NAME = "dsh-runtime.tar.xz"
     private const val ROOT_DIR_NAME = "dsh-runtime"
     private const val READY_MARKER = ".runtime-ready"
-    private const val REVISION = 2
+    private const val REVISION = 3
 
     /** chroot 之后 dsh 的入口，供启动命令使用。 */
     const val NODE_IN_ROOT = "/opt/node/bin/node"
