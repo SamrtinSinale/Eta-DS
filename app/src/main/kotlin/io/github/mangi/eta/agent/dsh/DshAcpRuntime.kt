@@ -34,13 +34,45 @@ internal class DshAcpRuntime(
         }
         val runId = session.runId
         var round = 0
-        var messageBlockIndex = 0
-        var messageBlockOpen = false
         var contentChars = 0
         // ACP 是流式的：正文与思考要自己累积，收尾时随结果一起交回，否则 UI 只有增量没有终态。
         val assistantText = StringBuilder()
         val assistantThinking = StringBuilder()
         var sawFailure = false
+        // dsh 的流是「思考块 / 正文块 / 工具调用」交替出现的，每个块必须占一个独立的 index：
+        // 一直复用同一个 index 会把工具调用之后的正文合并回之前那条消息，顺序和内容都会乱。
+        var blockIndex = -1
+        var openKind: AgentEvent.AssistantBlockKind? = null
+        var openBlockChars = 0
+        var lastTextMessageId: String? = null
+
+        fun closeOpenBlock() {
+            val kind = openKind ?: return
+            session.emit(
+                AgentEvent.AssistantBlockEnd(
+                    round = round,
+                    kind = kind,
+                    index = blockIndex,
+                    contentChars = openBlockChars,
+                )
+            )
+            openKind = null
+            openBlockChars = 0
+        }
+
+        fun openBlock(kind: AgentEvent.AssistantBlockKind, blockId: String?) {
+            blockIndex += 1
+            openKind = kind
+            openBlockChars = 0
+            session.emit(
+                AgentEvent.AssistantBlockStart(
+                    round = round,
+                    kind = kind,
+                    index = blockIndex,
+                    blockId = blockId,
+                )
+            )
+        }
         val client = DshAcpClient(
             command = config.command(),
             workingDirectory = config.processDirectory,
@@ -51,24 +83,20 @@ internal class DshAcpRuntime(
                         UPDATE_MESSAGE_CHUNK -> {
                             val delta = update.optJSONObject("content")?.optString("text").orEmpty()
                             if (delta.isEmpty()) return
-                            if (!messageBlockOpen) {
-                                session.emit(
-                                    AgentEvent.AssistantBlockStart(
-                                        round = round,
-                                        kind = AgentEvent.AssistantBlockKind.TEXT,
-                                        index = messageBlockIndex,
-                                        blockId = update.optString("messageId").ifBlank { null },
-                                    )
-                                )
-                                messageBlockOpen = true
+                            val messageId = update.optString("messageId").ifBlank { null }
+                            if (openKind != AgentEvent.AssistantBlockKind.TEXT || messageId != lastTextMessageId) {
+                                closeOpenBlock()
+                                openBlock(AgentEvent.AssistantBlockKind.TEXT, messageId)
+                                lastTextMessageId = messageId
                             }
                             contentChars += delta.length
+                            openBlockChars += delta.length
                             assistantText.append(delta)
                             session.emit(
                                 AgentEvent.AssistantBlockDelta(
                                     round = round,
                                     kind = AgentEvent.AssistantBlockKind.TEXT,
-                                    index = messageBlockIndex,
+                                    index = blockIndex,
                                     deltaChars = delta.length,
                                     delta = delta,
                                 )
@@ -78,13 +106,18 @@ internal class DshAcpRuntime(
                         UPDATE_THOUGHT_CHUNK -> {
                             val delta = update.optJSONObject("content")?.optString("text").orEmpty()
                             if (delta.isEmpty()) return
+                            if (openKind != AgentEvent.AssistantBlockKind.THINKING) {
+                                closeOpenBlock()
+                                openBlock(AgentEvent.AssistantBlockKind.THINKING, null)
+                            }
                             contentChars += delta.length
+                            openBlockChars += delta.length
                             assistantThinking.append(delta)
                             session.emit(
                                 AgentEvent.AssistantBlockDelta(
                                     round = round,
                                     kind = AgentEvent.AssistantBlockKind.THINKING,
-                                    index = messageBlockIndex,
+                                    index = blockIndex,
                                     deltaChars = delta.length,
                                     delta = delta,
                                 )
@@ -92,6 +125,8 @@ internal class DshAcpRuntime(
                         }
 
                         UPDATE_TOOL_CALL -> {
+                            // 工具卡片插进来，之后的正文属于新的一块。
+                            closeOpenBlock()
                             val toolCallId = update.optString("toolCallId").ifBlank { update.optString("id") }
                             session.emit(
                                 AgentEvent.ToolStarted(
@@ -174,16 +209,7 @@ internal class DshAcpRuntime(
                 session.emit(AgentEvent.RoundStarted(round = round, messageCount = 1))
                 promptWithRetry(client, sessionId, text)
             }
-            if (messageBlockOpen) {
-                session.emit(
-                    AgentEvent.AssistantBlockEnd(
-                        round = round,
-                        kind = AgentEvent.AssistantBlockKind.TEXT,
-                        index = messageBlockIndex,
-                        contentChars = contentChars,
-                    )
-                )
-            }
+            closeOpenBlock()
             session.emit(AgentEvent.RunFinished(round = round, contentChars = contentChars))
             session.complete(
                 AgentRuntimeWire.RunResult(

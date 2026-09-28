@@ -258,20 +258,40 @@ internal class DshAcpClient(
     private fun notifyClosed(reason: String) {
         if (closed) return
         closed = true
-        pending.values.forEach { it.trySend(JSONObject().put("error", JSONObject().put("message", reason))) }
-        pending.clear()
+        failPending(reason)
         runCatching { listener.onClosed(reason) }
     }
 
+    /**
+     * 主动收尾（用户停止、正常结束都会走这里）。
+     *
+     * 关键是先把在途请求结算掉：以前只 destroy 进程，等着 session/prompt 响应的协程要等到
+     * 超时（30 分钟）才醒，界面就成了"点了停止但半天没反应"。现在先让请求立刻拿到结果，
+     * 再尽力把进程和管道收干净。
+     */
     override fun close() {
         val started = process
+        val wasOpen = !closed
         process = null
         closed = true
+        failPending(STOPPED_REASON)
         runCatching { writer?.close() }
         writer = null
         runCatching { started?.destroy() }
+        // 关掉子进程的管道：即使 su 已经退出、node 还在，写回一个已关闭的管道也会让它退出。
+        runCatching { started?.inputStream?.close() }
+        runCatching { started?.errorStream?.close() }
+        runCatching { started?.outputStream?.close() }
         readerThread?.interrupt()
         errorThread?.interrupt()
+        if (wasOpen) runCatching { listener.onClosed(STOPPED_REASON) }
+    }
+
+    /** 让所有在途请求立刻拿到一个错误结果，而不是继续等超时。 */
+    private fun failPending(reason: String) {
+        if (pending.isEmpty()) return
+        pending.values.forEach { it.trySend(JSONObject().put("error", JSONObject().put("message", reason))) }
+        pending.clear()
     }
 
     companion object {
@@ -281,6 +301,7 @@ internal class DshAcpClient(
         private const val METHOD_SESSION_UPDATE = "session/update"
         private const val METHOD_REQUEST_PERMISSION = "session/request_permission"
         private const val ALLOW_ONCE = "allow-once"
+        private const val STOPPED_REASON = "已停止"
         private const val CONFIG_MODEL = "model"
         private const val INIT_TIMEOUT_MS = 60_000L
         private const val SESSION_TIMEOUT_MS = 60_000L
