@@ -5,6 +5,16 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 是否创建 GitHub Release 并上传已签名 APK（默认只构建并上传 Artifacts）
+        type: boolean
+        default: false
+      release_tag:
+        description: Release 标签（例如 v1.0.0）；留空则使用 eta-<运行编号>
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -18,6 +28,8 @@ jobs:
     name: 构建 Debug 与 Release APK
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    permissions:
+      contents: write
 
     steps:
       - name: 检出代码
@@ -115,3 +127,21 @@ jobs:
           archive: false
           if-no-files-found: error
           retention-days: 14
+
+      - name: 发布 GitHub Release
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release == true }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          tag="${RELEASE_TAG:-eta-${{ github.run_number }}}"
+          if gh release view "$tag" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "::error::Release $tag 已存在，请通过 release_tag 指定其它标签。"
+            exit 1
+          fi
+          gh release create "$tag" \
+            "${{ steps.apk.outputs.release_path }}" \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "$tag" \
+            --generate-notes
