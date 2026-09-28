@@ -98,7 +98,7 @@ internal class AgentToolServer(
         val method = payload.optString("method")
         val params = payload.optJSONObject("params") ?: JSONObject()
         return when (method) {
-            "initialize" -> HttpResponse(200, CONTENT_JSON, jsonRpcResult(id, initializeResult()))
+            "initialize" -> HttpResponse(200, CONTENT_JSON, jsonRpcResult(id, initializeResult(params)))
             "notifications/initialized", "initialized" -> HttpResponse(202, CONTENT_JSON, "")
             "tools/list" -> HttpResponse(200, CONTENT_JSON, jsonRpcResult(id, JSONObject().put("tools", mcpTools())))
             "tools/call" -> HttpResponse(200, CONTENT_JSON, jsonRpcResult(id, callTool(params)))
@@ -114,8 +114,18 @@ internal class AgentToolServer(
         return constantTimeEquals(header.substring(prefix.length).trim(), authToken)
     }
 
-    private fun initializeResult(): JSONObject = JSONObject()
-        .put("protocolVersion", PROTOCOL_VERSION)
+    /**
+     * 回显客户端请求的协议版本。
+     *
+     * 官方 MCP SDK 只认自己那份版本清单（2025-06-18 及更早），服务端若坚持报一个更新的
+     * 版本号，SDK 会直接判定握手失败——dsh 接不上 Eta 就是这个原因。本端点是无状态的，
+     * 这些版本都能服务，所以按客户端说的回。
+     */
+    private fun initializeResult(params: JSONObject): JSONObject = JSONObject()
+        .put(
+            "protocolVersion",
+            params.optString("protocolVersion").takeIf { it.isNotBlank() } ?: PROTOCOL_VERSION,
+        )
         .put("capabilities", JSONObject().put("tools", JSONObject().put("listChanged", false)))
         .put("serverInfo", JSONObject().put("name", serverName).put("version", SERVER_VERSION))
 

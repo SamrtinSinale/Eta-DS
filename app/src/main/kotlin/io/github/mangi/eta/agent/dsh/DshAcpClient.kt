@@ -182,7 +182,14 @@ internal class DshAcpClient(
                     pending.remove(id)?.trySend(message)
                     continue
                 }
-                if (message.optString("method") == METHOD_SESSION_UPDATE) {
+                val method = message.optString("method")
+                if (id >= 0 && method.isNotBlank()) {
+                    // agent -> client 的请求（审批等）：不回话 agent 就会一直等下去。
+                    runCatching { answerServerRequest(id, method, message.optJSONObject("params")) }
+                        .onFailure { Log.w(TAG, "answering $method failed", it) }
+                    continue
+                }
+                if (method == METHOD_SESSION_UPDATE) {
                     val params = message.optJSONObject("params") ?: continue
                     val session = params.optString("sessionId")
                     val update = params.optJSONObject("update") ?: continue
@@ -195,6 +202,47 @@ internal class DshAcpClient(
         } finally {
             notifyClosed("protocol-eof")
         }
+    }
+
+    /**
+     * 回答 agent 发来的请求。
+     *
+     * dsh 每次工具调用都会先要一次审批（只提供 allow-once / reject-once），
+     * Eta 侧不在这一层做审批，所以一律放行；未知方法回错，避免对方永久等待。
+     */
+    private fun answerServerRequest(id: Long, method: String, params: JSONObject?) {
+        val reply = JSONObject().put("jsonrpc", JSONRPC).put("id", id)
+        if (method == METHOD_REQUEST_PERMISSION) {
+            val optionId = allowOptionId(params)
+            Log.i(TAG, "permission granted: $optionId")
+            reply.put(
+                "result",
+                JSONObject().put(
+                    "outcome",
+                    JSONObject().put("outcome", "selected").put("optionId", optionId),
+                ),
+            )
+        } else {
+            Log.w(TAG, "unsupported agent request: $method")
+            reply.put(
+                "error",
+                JSONObject().put("code", -32601).put("message", "unsupported method: $method"),
+            )
+        }
+        send(reply)
+    }
+
+    private fun allowOptionId(params: JSONObject?): String {
+        val options = params?.optJSONArray("options") ?: return ALLOW_ONCE
+        for (index in 0 until options.length()) {
+            val option = options.optJSONObject(index) ?: continue
+            if (option.optString("kind").startsWith("allow")) return option.optString("optionId")
+        }
+        for (index in 0 until options.length()) {
+            val option = options.optJSONObject(index) ?: continue
+            if (option.optString("optionId").startsWith("allow")) return option.optString("optionId")
+        }
+        return ALLOW_ONCE
     }
 
     private fun errorLoop(started: Process) {
@@ -231,6 +279,8 @@ internal class DshAcpClient(
         private const val JSONRPC = "2.0"
         private const val PROTOCOL_VERSION = 1
         private const val METHOD_SESSION_UPDATE = "session/update"
+        private const val METHOD_REQUEST_PERMISSION = "session/request_permission"
+        private const val ALLOW_ONCE = "allow-once"
         private const val CONFIG_MODEL = "model"
         private const val INIT_TIMEOUT_MS = 60_000L
         private const val SESSION_TIMEOUT_MS = 60_000L

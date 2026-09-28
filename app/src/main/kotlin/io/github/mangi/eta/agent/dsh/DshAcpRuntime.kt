@@ -144,6 +144,11 @@ internal class DshAcpRuntime(
             },
         )
         Log.i(TAG, "acp launch: exec chroot " + config.command().last().substringAfter("exec chroot "))
+        // 用户按停止时必须真的把 ACP 掐掉：否则 agent 仍在等审批/模型，GUI 只能一直显示执行中。
+        val cancelBinding = session.controller.register {
+            Log.i(TAG, "cancel requested: closing ACP process")
+            runCatching { client.close() }
+        }
         return try {
             client.start()
             Log.i(TAG, "acp process spawned")
@@ -193,10 +198,13 @@ internal class DshAcpRuntime(
         } catch (throwable: Throwable) {
             Log.w(TAG, "dsh run failed", throwable)
             sawFailure = true
-            finishWithFailure(session, throwable.message ?: throwable.javaClass.simpleName)
+            val reason = if (session.controller.isCancelled) "已停止"
+            else throwable.message ?: throwable.javaClass.simpleName
+            finishWithFailure(session, reason)
             false
         } finally {
-            if (!sawFailure) runCatching { client.close() } else runCatching { client.close() }
+            cancelBinding.close()
+            runCatching { client.close() }
         }
     }
 

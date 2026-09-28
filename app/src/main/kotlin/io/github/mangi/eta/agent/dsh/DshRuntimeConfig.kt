@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import io.github.mangi.eta.agent.mcp.AgentToolServerHost
 import java.io.File
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -76,6 +77,9 @@ internal data class DshRuntimeConfig(
             append("export HOME=").append(DshRuntimeInstaller.HOME_IN_ROOT)
             append(" PATH=").append(PATH_IN_ROOT)
             append(" LANG=C.UTF-8")
+            // dsh 的审批策略由 DSH_PERMISSION_MODE 决定：danger-full-access => policy=never，
+            // 即不再向客户端要审批（Eta 侧没有审批 UI，也不打算有）。
+            append(" DSH_PERMISSION_MODE=").append(PERMISSION_MODE)
             if (apiKey.isNotBlank()) append(" DEEPSEEK_API_KEY=").append(shellQuote(apiKey))
             if (baseUrl.isNotBlank()) append(" DEEPSEEK_BASE_URL=").append(shellQuote(baseUrl))
             append("; exec chroot ").append(shellQuote(rootfsPath))
@@ -93,11 +97,19 @@ internal data class DshRuntimeConfig(
     fun mcpServers(): List<JSONObject> {
         val endpoint = AgentToolServerHost.endpoint ?: return emptyList()
         val token = AgentToolServerHost.authToken ?: return emptyList()
+        // ACP 的 HTTP MCP 声明必须带 type，且 headers 是 {name,value} 数组而不是对象；
+        // 写成对象会被当成 stdio 传输丢掉，agent 于是看不到任何手机工具。
         return listOf(
             JSONObject()
+                .put("type", MCP_TRANSPORT_HTTP)
                 .put("name", MCP_SERVER_NAME)
                 .put("url", endpoint)
-                .put("headers", JSONObject().put("Authorization", "Bearer $token")),
+                .put(
+                    "headers",
+                    JSONArray().put(
+                        JSONObject().put("name", "Authorization").put("value", "Bearer $token"),
+                    ),
+                ),
         )
     }
 
@@ -105,6 +117,7 @@ internal data class DshRuntimeConfig(
         private const val SU = "su"
         private const val ACP_PROFILE = "acp"
         private const val DEFAULT_ROUTE = "deepseek-official"
+        private const val PERMISSION_MODE = "danger-full-access"
         private const val TAG = "DshRuntimeConfig"
         /** 前段是宿主的 Android 路径（su、chroot），后段是 chroot 内的路径（node）。 */
         private const val PATH_IN_ROOT =
@@ -112,6 +125,7 @@ internal data class DshRuntimeConfig(
         private const val ENV_API_KEY = "DEEPSEEK_API_KEY"
         private const val ENV_BASE_URL = "DEEPSEEK_BASE_URL"
         private const val MCP_SERVER_NAME = "eta"
+        private const val MCP_TRANSPORT_HTTP = "http"
         private const val OVERLAY_RELATIVE = "opt/dsh/eta-run-overlay.patch.yml"
         private const val OVERLAY_IN_ROOT = "/opt/dsh/eta-run-overlay.patch.yml"
 
