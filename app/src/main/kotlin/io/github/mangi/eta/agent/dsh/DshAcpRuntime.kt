@@ -10,6 +10,7 @@ import io.github.mangi.eta.agent.terminal.LinuxDistribution
 import io.github.mangi.eta.agent.terminal.LinuxEnvironmentPaths
 import io.github.mangi.eta.core.safeLogType
 import java.io.File
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 
@@ -161,7 +162,7 @@ internal class DshAcpRuntime(
                     )
                 )
                 session.emit(AgentEvent.RoundStarted(round = round, messageCount = 1))
-                client.prompt(sessionId, text)
+                promptWithRetry(client, sessionId, text)
             }
             if (messageBlockOpen) {
                 session.emit(
@@ -194,6 +195,27 @@ internal class DshAcpRuntime(
         }
     }
 
+    /**
+     * 网关偶发 502 / 连接被重置时，dsh 只发一次请求就放弃；这里补上与 App 内 Agent Loop
+     * 一致的重试。只在"请求根本没建立"这类传输层错误上重试，避免重放已经执行过的工具。
+     */
+    private suspend fun promptWithRetry(client: DshAcpClient, sessionId: String, text: String) {
+        var attempt = 0
+        while (true) {
+            attempt += 1
+            try {
+                client.prompt(sessionId, text)
+                return
+            } catch (throwable: Throwable) {
+                val reason = throwable.message.orEmpty()
+                val retryable = RETRYABLE_MARKERS.any { reason.contains(it) }
+                if (!retryable || attempt >= PROMPT_ATTEMPTS) throw throwable
+                Log.w(TAG, "prompt attempt $attempt failed ($reason), retrying in ${RETRY_DELAY_MS * attempt}ms")
+                delay(RETRY_DELAY_MS * attempt)
+            }
+        }
+    }
+
     private fun finishWithFailure(session: AgentRuntimeSession, reason: String) {
         session.emit(AgentEvent.RunFailed(reason = reason))
         session.complete(
@@ -213,6 +235,9 @@ internal class DshAcpRuntime(
         private const val UPDATE_TOOL_CALL = "tool_call"
         private const val UPDATE_TOOL_CALL_UPDATE = "tool_call_update"
         private const val UPDATE_USAGE = "usage_update"
+        private const val PROMPT_ATTEMPTS = 4
+        private const val RETRY_DELAY_MS = 2_000L
+        private val RETRYABLE_MARKERS = listOf("API request", "超时（", "Connection", "ECONNRESET", "socket")
         private const val DSH_ENTRY_RELATIVE = "usr/local/lib/node_modules/@deepseek-ai/dsh/lib/bin.js"
         private const val OFFICIAL_ROUTE = "deepseek-official"
 
