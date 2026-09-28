@@ -380,6 +380,22 @@ internal class AgentRuntimeService : Service(), LifecycleOwner, SavedStateRegist
             dshRuntime.execute(session, request)
             return
         }
+        if (request.operation == AgentRuntimeWire.OP_CHAT) {
+            // Eda 的对话回合只有 dsh 一个内核：不可用时直接失败，绝不静默回退到旧内核
+            // （旧内核会把整段历史全量重发，实测 175k tokens/轮、单任务 50 分钟）。
+            val reason = io.github.mangi.eta.agent.dsh.DshAcpRuntime.unavailableReason(this, request)
+            Log.w("AgentRuntimeService", "dsh unavailable, failing run: " + reason)
+            session.emit(AgentEvent.RunFailed(reason = reason))
+            session.complete(
+                AgentRuntimeWire.RunResult(
+                    runId = session.runId,
+                    ok = false,
+                    content = "",
+                    error = reason,
+                )
+            ) {}
+            return
+        }
         val outcome = AgentRuntimeRunExecutor(
             context = this,
             currentPermissions = ::currentRuntimePermissions,
