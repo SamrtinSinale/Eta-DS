@@ -12,7 +12,7 @@ import org.tukaani.xz.XZInputStream
  * 把随 APK 一起分发的 DeepSeek Harness 运行时展开到应用私有目录。
  *
  * 运行时是一个最小 Linux 用户态：只含 Node 依赖的 glibc 集合、Node 二进制和 dsh
- * 本体，压缩后约 45MB，展开后约 226MB。首次启动时展开一次，之后由标记文件跳过。
+ * 本体，压缩后约 42MB，展开后约 203MB。首次启动时展开一次，之后由标记文件跳过。
  *
  * 这样用户安装 APK 后不需要自己安装 Linux 发行版、Node 或 npm 包。
  */
@@ -21,7 +21,7 @@ internal object DshRuntimeInstaller {
     private const val ASSET_NAME = "dsh-runtime.tar.xz"
     private const val ROOT_DIR_NAME = "dsh-runtime"
     private const val READY_MARKER = ".runtime-ready"
-    private const val REVISION = 3
+    private const val REVISION = 4
 
     /** chroot 之后 dsh 的入口，供启动命令使用。 */
     const val NODE_IN_ROOT = "/opt/node/bin/node"
@@ -47,6 +47,7 @@ internal object DshRuntimeInstaller {
         if (isReady(context)) return true
         val root = runtimeDirectory(context)
         return runCatching {
+            purgeLeftovers(root)
             if (root.exists()) root.deleteRecursively()
             if (!root.mkdirs() && !root.exists()) error("无法创建运行时目录")
             context.assets.open(ASSET_NAME).use { raw ->
@@ -64,6 +65,24 @@ internal object DshRuntimeInstaller {
             runCatching { root.deleteRecursively() }
             false
         }
+    }
+
+    /**
+     * 清掉旧运行时里 App 删不动的残留。
+     *
+     * dsh 是通过 su 以 root 身份跑的，它在运行时目录里留下的会话文件（\/workspace、
+     * 日志、node 缓存）owner 是 root，App 进程既删不掉子文件也进不去这些目录；
+     * 不先借 su 清一遍，升级后就会常年留着一堆旧文件白占几百 MB。
+     */
+    private fun purgeLeftovers(root: File) {
+        if (!root.exists()) return
+        runCatching {
+            val quoted = "'" + root.absolutePath.replace("'", "'\\''") + "'"
+            ProcessBuilder("su", "-c", "rm -rf $quoted")
+                .redirectErrorStream(true)
+                .start()
+                .waitFor()
+        }.onFailure { Log.w(TAG, "purge leftovers failed", it) }
     }
 
     private fun extract(tar: TarArchiveInputStream, root: File) {
