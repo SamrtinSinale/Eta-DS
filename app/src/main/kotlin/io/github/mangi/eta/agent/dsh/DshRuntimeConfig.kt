@@ -25,6 +25,14 @@ internal data class DshRuntimeConfig(
     val baseUrl: String,
     val workingDirectory: String = DshRuntimeInstaller.WORKSPACE_IN_ROOT,
 ) {
+    /**
+     * ACP 进程自身的宿主工作目录。
+     *
+     * [workingDirectory] 是 ACP 会话内部的 cwd（"\/workspace"，只在 chroot 里存在）；
+     * ProcessBuilder 用的是宿主路径，指向不存在的目录会直接 ENOENT。
+     */
+    val processDirectory: String = File(rootfsPath, "workspace").absolutePath
+
     /** su 是 Eta 既有提权路径；脚本里的 export 保证凭据不落进 argv。 */
     fun command(): List<String> = listOf(SU, "-c", rootScript())
 
@@ -98,7 +106,9 @@ internal data class DshRuntimeConfig(
         private const val ACP_PROFILE = "acp"
         private const val DEFAULT_ROUTE = "deepseek-official"
         private const val TAG = "DshRuntimeConfig"
-        private const val PATH_IN_ROOT = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        /** 前段是宿主的 Android 路径（su、chroot），后段是 chroot 内的路径（node）。 */
+        private const val PATH_IN_ROOT =
+            "/system/bin:/system/xbin:/product/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
         private const val ENV_API_KEY = "DEEPSEEK_API_KEY"
         private const val ENV_BASE_URL = "DEEPSEEK_BASE_URL"
         private const val MCP_SERVER_NAME = "eta"

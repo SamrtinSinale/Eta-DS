@@ -4,6 +4,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import android.app.Service
 import android.content.Context
+import android.util.Log
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.PixelFormat
@@ -371,7 +372,10 @@ internal class AgentRuntimeService : Service(), LifecycleOwner, SavedStateRegist
         session: AgentRuntimeSession,
         request: AgentRuntimeWire.RunRequest,
     ) {
-        val dshRuntime = io.github.mangi.eta.agent.dsh.DshAcpRuntime.create(this, request)
+        val dshRuntime = runCatching { io.github.mangi.eta.agent.dsh.DshAcpRuntime.create(this, request) }
+            .onFailure { Log.w("AgentRuntimeService", "dsh probe threw", it) }
+            .getOrNull()
+        Log.i("AgentRuntimeService", "executeRun: dshRuntime=" + (dshRuntime != null))
         if (dshRuntime != null) {
             dshRuntime.execute(session, request)
             return

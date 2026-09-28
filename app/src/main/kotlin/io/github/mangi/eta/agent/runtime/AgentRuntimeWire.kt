@@ -4,6 +4,7 @@ import io.github.mangi.eta.agent.model.AgentContextSnapshot
 import io.github.mangi.eta.agent.model.AssistantScreenContextProjection
 
 import android.content.ComponentName
+import io.github.mangi.eta.BuildConfig
 import android.content.Intent
 import android.os.Bundle
 import android.os.Parcel
@@ -82,7 +83,8 @@ internal object AgentRuntimeWire {
     /** service -> client：返回是否成功重新订阅指定 run。 */
     const val MSG_ATTACH_RUN_RESPONSE = 12
 
-    private const val MODULE_PACKAGE = "io.github.mangi.eta"
+    /** 本应用的 applicationId：入口进程与模块进程必须解析到同一个包。 */
+    private val MODULE_PACKAGE = BuildConfig.APPLICATION_ID
     private const val SERVICE_CLASS = "io.github.mangi.eta.agent.runtime.AgentRuntimeService"
 
     private const val KEY_TYPE = "type"

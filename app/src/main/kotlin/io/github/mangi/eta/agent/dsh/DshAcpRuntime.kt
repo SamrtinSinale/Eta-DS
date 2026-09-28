@@ -39,7 +39,7 @@ internal class DshAcpRuntime(
         var sawFailure = false
         val client = DshAcpClient(
             command = config.command(),
-            workingDirectory = config.workingDirectory,
+            workingDirectory = config.processDirectory,
             extraEnvironment = config.environment(),
             listener = object : DshAcpClient.Listener {
                 override fun onSessionUpdate(sessionId: String, update: JSONObject) {
@@ -137,8 +137,10 @@ internal class DshAcpRuntime(
                 }
             },
         )
+        Log.i(TAG, "acp launch: exec chroot " + config.command().last().substringAfter("exec chroot "))
         return try {
             client.start()
+            Log.i(TAG, "acp process spawned")
             runBlocking {
                 client.initialize()
                 val sessionId = client.newSession(
@@ -220,7 +222,14 @@ internal class DshAcpRuntime(
          */
         fun create(context: Context, request: AgentRuntimeWire.RunRequest): DshAcpRuntime? {
             val modelConfig = request.config
+            val ready = runCatching { DshRuntimeInstaller.isReady(context) }.getOrDefault(false)
+            Log.i(
+                TAG,
+                "probe: key=${modelConfig.apiKey.isNotBlank()} base=${modelConfig.baseUrl.isNotBlank()} " +
+                    "model=${modelConfig.model} provider=${modelConfig.providerId} runtimeReady=$ready",
+            )
             if (modelConfig.apiKey.isBlank() || modelConfig.baseUrl.isBlank() || modelConfig.model.isBlank()) {
+                Log.i(TAG, "probe: model config incomplete, falling back")
                 return null
             }
             val resolved = DshRuntimeConfig.resolveBuiltin(

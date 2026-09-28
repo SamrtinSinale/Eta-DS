@@ -1,5 +1,7 @@
 package io.github.mangi.eta.hook.system
 
+import io.github.mangi.eta.BuildConfig
+
 import android.Manifest
 import android.content.BroadcastReceiver
 import android.content.ComponentName
@@ -817,7 +819,7 @@ internal class AccessibilityServiceEnforcer(
     }
 
     private companion object {
-        const val APP_PACKAGE = "io.github.mangi.eta"
+        val APP_PACKAGE = BuildConfig.APPLICATION_ID
         const val SERVICE_CLASS =
             "io.github.mangi.eta.agent.accessibility.AgentAccessibilityService"
         const val DISABLED = 0

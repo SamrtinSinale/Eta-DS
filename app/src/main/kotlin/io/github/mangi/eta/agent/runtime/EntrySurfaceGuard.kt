@@ -1,5 +1,7 @@
 package io.github.mangi.eta.agent.runtime
 
+import io.github.mangi.eta.BuildConfig
+
 import android.os.SystemClock
 import io.github.mangi.eta.agent.accessibility.AgentAccessibilityService
 import io.github.mangi.eta.agent.accessibility.PackageWindowVisibility
@@ -138,7 +140,7 @@ internal class EntrySurfaceGuard private constructor(
         private const val BREENO_PACKAGE_NAME = "com.heytap.speechassist"
         private const val XIAOAI_HANDOFF_SOURCE = "xiaoai"
         private const val XIAOAI_PACKAGE_NAME = "com.miui.voiceassist"
-        private const val ETA_PACKAGE_NAME = "io.github.mangi.eta"
+        private val ETA_PACKAGE_NAME = BuildConfig.APPLICATION_ID
         private const val NANOS_PER_MILLISECOND = 1_000_000L
     }
 }

@@ -1,6 +1,7 @@
 package io.github.mangi.eta.agent.accessibility
 
 import android.net.Uri
+import io.github.mangi.eta.BuildConfig
 import android.os.Bundle
 
 /**
@@ -30,7 +31,7 @@ internal object AccessibilityProtectionProtocol {
     const val SETTING_NAME = "eta_accessibility_protection_enabled"
     const val DEFAULT_ENABLED = false
 
-    const val HEALTH_AUTHORITY = "io.github.mangi.eta.accessibility.health"
+    val HEALTH_AUTHORITY = BuildConfig.APPLICATION_ID + ".accessibility.health"
     const val HEALTH_METHOD = "accessibility_health"
     const val HEALTH_STATUS = "status"
     const val HEALTH_STATUS_CONNECTED = "connected"
