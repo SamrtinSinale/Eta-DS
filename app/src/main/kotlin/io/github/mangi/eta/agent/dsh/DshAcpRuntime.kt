@@ -2,6 +2,8 @@ package io.github.mangi.eta.agent.dsh
 
 import android.content.Context
 import android.util.Log
+import io.github.mangi.eta.agent.model.AgentModelClient
+import io.github.mangi.eta.agent.model.AgentTraceFormatter
 import io.github.mangi.eta.agent.runtime.AgentEvent
 import io.github.mangi.eta.agent.runtime.AgentRuntimeSession
 import io.github.mangi.eta.agent.runtime.AgentRuntimeWire
@@ -32,6 +34,8 @@ internal class DshAcpRuntime(
             finishWithFailure(session, "消息为空")
             return false
         }
+        val promptText = promptWithHistory(request, text)
+        Log.i(TAG, "prompt: history=${request.history.size} msgs, chars=${promptText.length}")
         val runId = session.runId
         var round = 0
         var contentChars = 0
@@ -128,12 +132,14 @@ internal class DshAcpRuntime(
                             // 工具卡片插进来，之后的正文属于新的一块。
                             closeOpenBlock()
                             val toolCallId = update.optString("toolCallId").ifBlank { update.optString("id") }
+                            val call = toolCallFor(update, toolCallId)
                             session.emit(
                                 AgentEvent.ToolStarted(
                                     round = round,
                                     toolCallId = toolCallId,
-                                    name = update.optString("title").ifBlank { update.optString("kind", "tool") },
-                                    argsPreview = update.optString("rawInput").take(400),
+                                    name = call.name,
+                                    argsPreview = traceFormatter.summarizeArguments(call),
+                                    command = traceFormatter.displayCommand(call),
                                 )
                             )
                         }
@@ -145,7 +151,7 @@ internal class DshAcpRuntime(
                                     AgentEvent.ToolFinished(
                                         round = round,
                                         toolCallId = update.optString("toolCallId").ifBlank { update.optString("id") },
-                                        name = update.optString("title").ifBlank { "tool" },
+                                        name = bareToolName(update.optString("title").ifBlank { "tool" }),
                                         resultSummary = update.optString("rawOutput").take(600),
                                         imageCount = 0,
                                         imageBytes = 0,
@@ -207,7 +213,7 @@ internal class DshAcpRuntime(
                     )
                 )
                 session.emit(AgentEvent.RoundStarted(round = round, messageCount = 1))
-                promptWithRetry(client, sessionId, text)
+                promptWithRetry(client, sessionId, promptText)
             }
             closeOpenBlock()
             session.emit(AgentEvent.RunFinished(round = round, contentChars = contentChars))
@@ -255,6 +261,30 @@ internal class DshAcpRuntime(
         }
     }
 
+    /**
+     * 每一轮都会新建一个 ACP 会话，dsh 自己不保留跨轮记忆；把已发生的往来压成一段前言
+     * 补进 prompt，否则用户会看到"它以为这是第一次聊天"。
+     */
+    private fun promptWithHistory(request: AgentRuntimeWire.RunRequest, text: String): String {
+        val lines = request.history.takeLast(MAX_HISTORY_MESSAGES).mapNotNull { message ->
+            val content = message.content.trim()
+            if (content.isEmpty()) return@mapNotNull null
+            val speaker = when (message.role) {
+                "user" -> "用户"
+                "assistant" -> "你"
+                else -> return@mapNotNull null
+            }
+            "$speaker：${content.take(MAX_HISTORY_CHARS_PER_MESSAGE)}"
+        }
+        if (lines.isEmpty()) return text
+        return buildString {
+            append("（以下是本次对话之前的往来，仅供你了解上下文，不要重复回复它们）\n")
+            append(lines.joinToString("\n"))
+            append("\n（历史结束）\n\n")
+            append(text)
+        }
+    }
+
     private fun finishWithFailure(session: AgentRuntimeSession, reason: String) {
         session.emit(AgentEvent.RunFailed(reason = reason))
         session.complete(
@@ -274,6 +304,8 @@ internal class DshAcpRuntime(
         private const val UPDATE_TOOL_CALL = "tool_call"
         private const val UPDATE_TOOL_CALL_UPDATE = "tool_call_update"
         private const val UPDATE_USAGE = "usage_update"
+        private const val MAX_HISTORY_MESSAGES = 20
+        private const val MAX_HISTORY_CHARS_PER_MESSAGE = 800
         private const val PROMPT_ATTEMPTS = 4
         private const val RETRY_DELAY_MS = 2_000L
         private val RETRYABLE_MARKERS = listOf("API request", "超时（", "Connection", "ECONNRESET", "socket")
@@ -305,6 +337,26 @@ internal class DshAcpRuntime(
             ) ?: return null
             return DshAcpRuntime(resolved)
         }
+
+        /** dsh 把 MCP 工具暴露成 mcp__<server>__<tool>，而 UI 的图标与文案表只认裸工具名。 */
+        private fun bareToolName(raw: String): String {
+            if (!raw.startsWith("mcp__")) return raw
+            val parts = raw.split("__")
+            return if (parts.size >= 3) parts.drop(2).joinToString("__") else raw
+        }
+
+        /** 复用 Eta 自己的摘要器，让 dsh 调用的工具卡片和原生 Agent Loop 长得一样。 */
+        private fun toolCallFor(update: JSONObject, toolCallId: String): AgentModelClient.ToolCall {
+            val title = update.optString("title").ifBlank { update.optString("kind").ifBlank { "tool" } }
+            val rawInput = update.optJSONObject("rawInput") ?: JSONObject()
+            return AgentModelClient.ToolCall(
+                id = toolCallId,
+                name = bareToolName(title),
+                argumentsJson = rawInput.toString(),
+            )
+        }
+
+        private val traceFormatter = AgentTraceFormatter()
 
         private fun readyDistribution(context: Context): LinuxDistribution? =
             LinuxDistribution.entries.firstOrNull { distribution ->
