@@ -3,6 +3,7 @@ package io.github.mangi.eta.agent.dsh
 import android.content.Context
 import android.util.Log
 import io.github.mangi.eta.agent.mcp.AgentToolServerHost
+import io.github.mangi.eta.agent.skill.SkillRuntime
 import java.io.File
 import org.json.JSONArray
 import org.json.JSONObject
@@ -25,6 +26,8 @@ internal data class DshRuntimeConfig(
     val apiKey: String,
     val baseUrl: String,
     val workingDirectory: String = DshRuntimeInstaller.WORKSPACE_IN_ROOT,
+    /** App 的技能库目录；会 bind 进 chroot，供 dsh 读取和写入技能。 */
+    val skillsDirectory: String = "",
 ) {
     /**
      * ACP 进程自身的宿主工作目录。
@@ -62,6 +65,10 @@ internal data class DshRuntimeConfig(
                         .append(JSONObject.quote(providerRoute.ifBlank { DEFAULT_ROUTE }))
                         .append('\n')
                     append("    model: ").append(JSONObject.quote(model)).append('\n')
+                    append("- id: system-prompt\n")
+                    append("  config:\n")
+                    append("    personaSuffix: |\n")
+                    skillPromptLines().forEach { line -> append("      ").append(line).append('\n') }
                 }
             )
             OVERLAY_IN_ROOT
@@ -93,6 +100,19 @@ internal data class DshRuntimeConfig(
             val procSelf = File(rootfsPath, "proc/self").absolutePath
             append("if [ ! -e ").append(shellQuote(procSelf)).append(" ]; then ")
             append("mount -t proc proc ").append(shellQuote("$rootfsPath/proc")).append(" 2>/dev/null; fi; ")
+            // 技能库：把 App 的技能目录 bind 进 chroot，dsh 才能读到 SKILL.md，也能把新技能写回来。
+            // 先 umount 再 bind，避免上次的挂载残留（挂载失败不阻断启动）。
+            val skillsSource = skillsDirectory.takeIf { it.isNotBlank() }?.let(::File)?.takeIf { it.isDirectory }
+            if (skillsSource != null) {
+                val skillsTarget = File(rootfsPath, SKILLS_TARGET_REL).absolutePath
+                append("mkdir -p ").append(shellQuote(skillsTarget)).append("; ")
+                append("umount ").append(shellQuote(skillsTarget)).append(" 2>/dev/null; ")
+                append("mount --bind ")
+                    .append(shellQuote(skillsSource.absolutePath))
+                    .append(' ')
+                    .append(shellQuote(skillsTarget))
+                    .append(" 2>/dev/null; ")
+            }
             append("exec chroot ").append(shellQuote(rootfsPath))
             append(' ').append(DshRuntimeInstaller.NODE_IN_ROOT)
             append(' ').append(DshRuntimeInstaller.DSH_ENTRY_IN_ROOT)
@@ -124,6 +144,56 @@ internal data class DshRuntimeConfig(
         )
     }
 
+    /**
+     * dsh 的 system prompt 后缀：每次运行都重新生成，把当前技能库索引交给它。
+     * 装完新技能下一轮自动出现在这里，不需要重启或手动同步。
+     */
+    private fun skillPromptLines(): List<String> {
+        val lines = ArrayList<String>()
+        lines += "Your working directory is {{cwd}}."
+        lines += ""
+        lines += "你的技能库在 $SKILLS_IN_ROOT：每个技能是 <名字>/SKILL.md，任务开始前先对照下面的技能列表；"
+        lines += "任务与某个技能相符时，先读它的 SKILL.md 再执行；需要新技能时用 skills_list_curated / skills_inspect_github 找到，"
+        lines += "再通过 skills_install_from_github 安装——装好后会自动出现在本列表（下一轮生效）。"
+        val skills = skillIndex()
+        if (skills.isEmpty()) {
+            lines += "当前技能库为空。"
+        } else {
+            lines += "可用技能："
+            skills.take(MAX_SKILL_LINES).forEach { (name, description) ->
+                lines += if (description.isBlank()) "- $name" else "- $name：$description"
+            }
+            if (skills.size > MAX_SKILL_LINES) {
+                lines += "（还有 ${skills.size - MAX_SKILL_LINES} 个，完整列表用 skills_list 查看）"
+            }
+        }
+        return lines
+    }
+
+    /** 从技能目录读出名字与一句话描述；SKILL.md 缺失或读不动的技能跳过。 */
+    private fun skillIndex(): List<Pair<String, String>> {
+        val directory = skillsDirectory.takeIf { it.isNotBlank() }?.let(::File) ?: return emptyList()
+        val entries = directory.listFiles()?.filter { it.isDirectory }?.sortedBy { it.name } ?: return emptyList()
+        return entries.mapNotNull { skill ->
+            val document = File(skill, "SKILL.md").takeIf { it.isFile } ?: return@mapNotNull null
+            val text = runCatching { document.readText().take(4_000) }.getOrNull() ?: return@mapNotNull null
+            val name = frontmatterValue(text, "name")?.takeIf { it.isNotBlank() } ?: skill.name
+            val description = frontmatterValue(text, "description")?.trim()?.take(MAX_SKILL_DESCRIPTION).orEmpty()
+            name to description
+        }
+    }
+
+    private fun frontmatterValue(text: String, key: String): String? {
+        val lines = text.lineSequence().take(40).toList()
+        if (lines.firstOrNull()?.trim() != "---") return null
+        for (index in 1 until lines.size) {
+            val line = lines[index].trim()
+            if (line == "---") break
+            if (line.startsWith("$key:")) return line.removePrefix("$key:").trim()
+        }
+        return null
+    }
+
     companion object {
         private const val SU = "su"
         private const val ACP_PROFILE = "acp"
@@ -139,6 +209,10 @@ internal data class DshRuntimeConfig(
         private const val MCP_TRANSPORT_HTTP = "http"
         private const val OVERLAY_RELATIVE = "opt/dsh/eta-run-overlay.patch.yml"
         private const val OVERLAY_IN_ROOT = "/opt/dsh/eta-run-overlay.patch.yml"
+        private const val SKILLS_TARGET_REL = "root/.dsh/skills"
+        private const val SKILLS_IN_ROOT = "/root/.dsh/skills"
+        private const val MAX_SKILL_LINES = 40
+        private const val MAX_SKILL_DESCRIPTION = 160
 
         /**
          * 内置运行时尚未展开时返回 null，让上游回退到原有 Agent Loop。
@@ -152,12 +226,14 @@ internal data class DshRuntimeConfig(
             baseUrl: String,
         ): DshRuntimeConfig? {
             if (!DshRuntimeInstaller.isReady(context)) return null
+            runCatching { SkillRuntime.skillsRoot(context).mkdirs() }
             return DshRuntimeConfig(
                 rootfsPath = DshRuntimeInstaller.runtimeDirectory(context).absolutePath,
                 providerRoute = providerRoute,
                 model = model,
                 apiKey = apiKey,
                 baseUrl = baseUrl,
+                skillsDirectory = SkillRuntime.skillsRoot(context).absolutePath,
             )
         }
 
