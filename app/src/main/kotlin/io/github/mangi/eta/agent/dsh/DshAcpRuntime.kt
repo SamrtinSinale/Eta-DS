@@ -2,6 +2,7 @@ package io.github.mangi.eta.agent.dsh
 
 import android.content.Context
 import android.util.Log
+import io.github.mangi.eta.agent.model.AgentConversationCodec
 import io.github.mangi.eta.agent.model.AgentModelClient
 import io.github.mangi.eta.data.model.ReasoningEffort
 import io.github.mangi.eta.agent.model.AgentTraceFormatter
@@ -15,6 +16,7 @@ import io.github.mangi.eta.core.safeLogType
 import java.io.File
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -40,6 +42,9 @@ internal class DshAcpRuntime(
         val runId = session.runId
         var round = 0
         var contentChars = 0
+        // dsh 不保存自己的会话：把这一轮做过什么回写成 Eta 的历史消息，
+        // 否则 checkpoint 里只剩用户消息，下一轮它什么都不记得。
+        val transcript = DshTranscriptBuilder(runId)
         // ACP 是流式的：正文与思考要自己累积，收尾时随结果一起交回，否则 UI 只有增量没有终态。
         val assistantText = StringBuilder()
         val assistantThinking = StringBuilder()
@@ -97,6 +102,7 @@ internal class DshAcpRuntime(
                             contentChars += delta.length
                             openBlockChars += delta.length
                             assistantText.append(delta)
+                            transcript.text(delta)
                             session.emit(
                                 AgentEvent.AssistantBlockDelta(
                                     round = round,
@@ -118,6 +124,7 @@ internal class DshAcpRuntime(
                             contentChars += delta.length
                             openBlockChars += delta.length
                             assistantThinking.append(delta)
+                            transcript.thinking(delta)
                             session.emit(
                                 AgentEvent.AssistantBlockDelta(
                                     round = round,
@@ -134,6 +141,7 @@ internal class DshAcpRuntime(
                             closeOpenBlock()
                             val toolCallId = update.optString("toolCallId").ifBlank { update.optString("id") }
                             val call = toolCallFor(update, toolCallId)
+                            transcript.toolStarted(toolCallId, call.name, call.argumentsJson)
                             session.emit(
                                 AgentEvent.ToolStarted(
                                     round = round,
@@ -148,12 +156,15 @@ internal class DshAcpRuntime(
                         UPDATE_TOOL_CALL_UPDATE -> {
                             val status = update.optString("status")
                             if (status == "completed" || status == "failed") {
+                                val toolCallId = update.optString("toolCallId").ifBlank { update.optString("id") }
+                                val resultText = toolResultText(update)
+                                transcript.toolFinished(toolCallId, resultText)
                                 session.emit(
                                     AgentEvent.ToolFinished(
                                         round = round,
-                                        toolCallId = update.optString("toolCallId").ifBlank { update.optString("id") },
+                                        toolCallId = toolCallId,
                                         name = bareToolName(update.optString("title").ifBlank { "tool" }),
-                                        resultSummary = toolResultText(update).take(600),
+                                        resultSummary = resultText.take(600),
                                         imageCount = 0,
                                         imageBytes = 0,
                                         success = status == "completed",
@@ -224,6 +235,7 @@ internal class DshAcpRuntime(
                 promptWithRetry(client, sessionId, promptText)
             }
             closeOpenBlock()
+            val transcriptMessages = transcript.build()
             session.emit(AgentEvent.RunFinished(round = round, contentChars = contentChars))
             session.complete(
                 AgentRuntimeWire.RunResult(
@@ -231,6 +243,7 @@ internal class DshAcpRuntime(
                     ok = true,
                     content = assistantText.toString(),
                     reasoningContent = assistantThinking.toString(),
+                    transcript = transcriptMessages,
                     operation = request.operation,
                 )
             ) {}
@@ -240,7 +253,8 @@ internal class DshAcpRuntime(
             sawFailure = true
             val reason = if (session.controller.isCancelled) "已停止"
             else throwable.message ?: throwable.javaClass.simpleName
-            finishWithFailure(session, reason)
+            val partial = runCatching { transcript.build() }.getOrDefault(emptyList())
+            finishWithFailure(session, reason, partial)
             false
         } finally {
             cancelBinding.close()
@@ -411,7 +425,11 @@ internal class DshAcpRuntime(
         ReasoningEffort.XHIGH, ReasoningEffort.MAX -> "max"
     }
 
-    private fun finishWithFailure(session: AgentRuntimeSession, reason: String) {
+    private fun finishWithFailure(
+        session: AgentRuntimeSession,
+        reason: String,
+        transcript: List<AgentModelClient.ConversationMessage> = emptyList(),
+    ) {
         session.emit(AgentEvent.RunFailed(reason = reason))
         session.complete(
             AgentRuntimeWire.RunResult(
@@ -419,6 +437,7 @@ internal class DshAcpRuntime(
                 ok = false,
                 content = "",
                 error = reason,
+                transcript = transcript,
             )
         ) {}
     }
@@ -515,5 +534,112 @@ internal class DshAcpRuntime(
                         File(rootfs, DSH_ENTRY_RELATIVE).exists()
                 }.getOrDefault(false)
             }
+    }
+}
+
+/**
+ * 把 dsh 的 ACP 流（思考／正文／工具调用／工具结果）重新拼回 Eta 的历史消息。
+ *
+ * dsh 每次提问都是一次性的 ACP 会话，不会把这一轮做过什么写回 Eta；
+ * 没有这个回写，checkpoint 里就只剩用户消息，下一轮 dsh 从零开始（反复重读、轮数暴涨）。
+ * 形态对齐旧内核：一段 assistant 输出（可带 tool_calls）+ 若干条 tool 结果。
+ */
+private class DshTranscriptBuilder(private val runId: String) {
+    private val messages = JSONArray()
+    private val reasoning = StringBuilder()
+    private val content = StringBuilder()
+    private var calls = JSONArray()
+    private val results = ArrayList<Pair<String, String>>()
+    private val resultIds = linkedSetOf<String>()
+    private var hasPending = false
+    private var round = 0
+
+    @Synchronized
+    fun thinking(delta: String) {
+        if (delta.isEmpty()) return
+        if (results.isNotEmpty()) flush()
+        hasPending = true
+        reasoning.append(delta)
+    }
+
+    @Synchronized
+    fun text(delta: String) {
+        if (delta.isEmpty()) return
+        if (results.isNotEmpty()) flush()
+        hasPending = true
+        content.append(delta)
+    }
+
+    @Synchronized
+    fun toolStarted(id: String, name: String, argumentsJson: String) {
+        if (results.isNotEmpty()) flush()
+        hasPending = true
+        calls.put(
+            JSONObject()
+                .put("id", id)
+                .put("type", "function")
+                .put("function", JSONObject().put("name", name).put("arguments", argumentsJson))
+        )
+    }
+
+    @Synchronized
+    fun toolFinished(id: String, result: String) {
+        results += id to result
+    }
+
+    /** 把当前一段 assistant 输出与已收到的工具结果写进消息列表。 */
+    @Synchronized
+    fun flush() {
+        if (!hasPending && results.isEmpty()) return
+        if (hasPending) {
+            round += 1
+            val message = JSONObject()
+                .put("role", "assistant")
+                .put("content", content.toString())
+            if (reasoning.isNotEmpty()) message.put("reasoning_content", reasoning.toString())
+            if (calls.length() > 0) message.put("tool_calls", JSONArray(calls.toString()))
+            message.put("_eta_message_id", "assistant-$runId-$round")
+            messages.put(message)
+        }
+        for ((id, text) in results) {
+            messages.put(
+                JSONObject()
+                    .put("role", "tool")
+                    .put("tool_call_id", id)
+                    .put("content", text)
+            )
+            resultIds += id
+        }
+        hasPending = false
+        reasoning.setLength(0)
+        content.setLength(0)
+        calls = JSONArray()
+        results.clear()
+    }
+
+    /** 收尾：给被中断、始终没有等到结果的工具调用补一条占位结果，再转成持久消息。 */
+    @Synchronized
+    fun build(): List<AgentModelClient.ConversationMessage> {
+        flush()
+        for (index in 0 until messages.length()) {
+            val message = messages.optJSONObject(index) ?: continue
+            val messageCalls = message.optJSONArray("tool_calls") ?: continue
+            for (callIndex in 0 until messageCalls.length()) {
+                val callId = messageCalls.optJSONObject(callIndex)?.optString("id").orEmpty()
+                if (callId.isEmpty() || callId in resultIds) continue
+                resultIds += callId
+                messages.put(
+                    JSONObject()
+                        .put("role", "tool")
+                        .put("tool_call_id", callId)
+                        .put("content", INTERRUPTED_RESULT)
+                )
+            }
+        }
+        return AgentConversationCodec.transcript(messages, 0)
+    }
+
+    companion object {
+        private const val INTERRUPTED_RESULT = "（执行被中断，未返回结果）"
     }
 }
