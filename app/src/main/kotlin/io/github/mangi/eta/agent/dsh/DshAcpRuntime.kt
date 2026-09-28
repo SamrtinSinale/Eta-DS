@@ -3,6 +3,7 @@ package io.github.mangi.eta.agent.dsh
 import android.content.Context
 import android.util.Log
 import io.github.mangi.eta.agent.model.AgentModelClient
+import io.github.mangi.eta.data.model.ReasoningEffort
 import io.github.mangi.eta.agent.model.AgentTraceFormatter
 import io.github.mangi.eta.agent.runtime.AgentEvent
 import io.github.mangi.eta.agent.runtime.AgentRuntimeSession
@@ -203,6 +204,13 @@ internal class DshAcpRuntime(
                     runCatching { client.setModel(sessionId, config.providerRoute, config.model) }
                         .onFailure { Log.w(TAG, "set model failed: ${it.safeLogType()}") }
                 }
+                // 会话里选的思考强度要真的传下去，否则 dsh 一直用它自己的默认档（high），
+                // 对话里的「思考」开关就成了摆设。
+                dshEffort(request.config.effectiveReasoningEffort)?.let { effort ->
+                    runCatching { client.setConfigOption(sessionId, CONFIG_REASONING_EFFORT, effort) }
+                        .onSuccess { Log.i(TAG, "reasoning effort: $effort") }
+                        .onFailure { Log.w(TAG, "setting reasoning effort failed: ${it.message}") }
+                }
                 round = 1
                 session.emit(
                     AgentEvent.RunStarted(
@@ -341,6 +349,18 @@ internal class DshAcpRuntime(
                 .takeIf { it.isNotBlank() && it.length <= MAX_DISPLAY_COMMAND_CHARS }
         }.getOrNull()
 
+    /**
+     * Eta 的思考档位（off/default/minimal/low/medium/high/xhigh/max）映射到 dsh 的四档
+     * （off/low/high/max）；default 交给 dsh 自己的默认值。
+     */
+    private fun dshEffort(effort: ReasoningEffort?): String? = when (effort) {
+        null, ReasoningEffort.DEFAULT -> null
+        ReasoningEffort.OFF -> "off"
+        ReasoningEffort.MINIMAL, ReasoningEffort.LOW -> "low"
+        ReasoningEffort.MEDIUM, ReasoningEffort.HIGH -> "high"
+        ReasoningEffort.XHIGH, ReasoningEffort.MAX -> "max"
+    }
+
     private fun finishWithFailure(session: AgentRuntimeSession, reason: String) {
         session.emit(AgentEvent.RunFailed(reason = reason))
         session.complete(
@@ -360,6 +380,7 @@ internal class DshAcpRuntime(
         private const val UPDATE_TOOL_CALL = "tool_call"
         private const val UPDATE_TOOL_CALL_UPDATE = "tool_call_update"
         private const val UPDATE_USAGE = "usage_update"
+        private const val CONFIG_REASONING_EFFORT = "reasoning_effort"
         private const val UNKNOWN_TOOL_LABEL = "准备执行"
         private const val MAX_DISPLAY_COMMAND_CHARS = 600
         private const val MAX_HISTORY_MESSAGES = 20

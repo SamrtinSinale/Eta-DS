@@ -101,6 +101,16 @@ internal class DshAcpClient(
         return id
     }
 
+    /** 设置会话广告出来的任意配置项（模型、思考强度……）。 */
+    suspend fun setConfigOption(sessionId: String, configId: String, value: String): JSONObject = request(
+        METHOD_SET_CONFIG_OPTION,
+        JSONObject()
+            .put("sessionId", sessionId)
+            .put("configId", configId)
+            .put("value", value),
+        timeoutMs = SESSION_TIMEOUT_MS,
+    )
+
     suspend fun setModel(sessionId: String, providerRoute: String, model: String): JSONObject =
         request(
             "session/set_config_option",
@@ -300,6 +310,7 @@ internal class DshAcpClient(
         private const val PROTOCOL_VERSION = 1
         private const val METHOD_SESSION_UPDATE = "session/update"
         private const val METHOD_REQUEST_PERMISSION = "session/request_permission"
+        private const val METHOD_SET_CONFIG_OPTION = "session/set_config_option"
         private const val ALLOW_ONCE = "allow-once"
         private const val STOPPED_REASON = "已停止"
         private const val CONFIG_MODEL = "model"
