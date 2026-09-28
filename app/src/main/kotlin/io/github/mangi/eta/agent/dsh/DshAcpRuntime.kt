@@ -37,6 +37,9 @@ internal class DshAcpRuntime(
         var messageBlockIndex = 0
         var messageBlockOpen = false
         var contentChars = 0
+        // ACP 是流式的：正文与思考要自己累积，收尾时随结果一起交回，否则 UI 只有增量没有终态。
+        val assistantText = StringBuilder()
+        val assistantThinking = StringBuilder()
         var sawFailure = false
         val client = DshAcpClient(
             command = config.command(),
@@ -60,6 +63,7 @@ internal class DshAcpRuntime(
                                 messageBlockOpen = true
                             }
                             contentChars += delta.length
+                            assistantText.append(delta)
                             session.emit(
                                 AgentEvent.AssistantBlockDelta(
                                     round = round,
@@ -75,6 +79,7 @@ internal class DshAcpRuntime(
                             val delta = update.optJSONObject("content")?.optString("text").orEmpty()
                             if (delta.isEmpty()) return
                             contentChars += delta.length
+                            assistantThinking.append(delta)
                             session.emit(
                                 AgentEvent.AssistantBlockDelta(
                                     round = round,
@@ -179,8 +184,8 @@ internal class DshAcpRuntime(
                 AgentRuntimeWire.RunResult(
                     runId = runId,
                     ok = true,
-                    content = "",
-                    reasoningContent = "",
+                    content = assistantText.toString(),
+                    reasoningContent = assistantThinking.toString(),
                     operation = request.operation,
                 )
             ) {}
