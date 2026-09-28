@@ -21,7 +21,7 @@ internal object DshRuntimeInstaller {
     private const val ASSET_NAME = "dsh-runtime.tar.xz"
     private const val ROOT_DIR_NAME = "dsh-runtime"
     private const val READY_MARKER = ".runtime-ready"
-    private const val REVISION = 1
+    private const val REVISION = 2
 
     /** chroot 之后 dsh 的入口，供启动命令使用。 */
     const val NODE_IN_ROOT = "/opt/node/bin/node"
@@ -33,8 +33,9 @@ internal object DshRuntimeInstaller {
 
     fun isReady(context: Context): Boolean {
         val root = runtimeDirectory(context)
-        return File(root, READY_MARKER).exists() &&
-            File(root, "opt/node/bin/node").exists() &&
+        val marker = File(root, READY_MARKER)
+        if (!marker.exists() || marker.readText().trim() != "revision=$REVISION") return false
+        return File(root, "opt/node/bin/node").exists() &&
             File(root, "opt/dsh/lib/bin.js").exists()
     }
 
