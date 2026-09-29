@@ -1,17 +1,33 @@
-name: Eta Build
+name: Eta Release Build
 
+# 只构建 Release（签名）APK：
+#   - push 到 main：构建并上传 Artifact，不发布 Release
+#   - push v* 标签：以标签名作为版本号构建并上传 Artifact，不发布 Release
+#   - 手动运行：可指定版本号，并自行决定是否创建 GitHub Release
 on:
   push:
     branches:
       - main
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
+      version:
+        description: "版本号，例如 3.0.6 或 306；留空则使用仓库里的 versionName"
+        type: string
+        required: false
+        default: ""
+      version_code:
+        description: "versionCode，例如 2026092901；留空则自动使用 <今天 yyyyMMdd>01"
+        type: string
+        required: false
+        default: ""
       publish_release:
-        description: 是否创建 GitHub Release 并上传已签名 APK（默认只构建并上传 Artifacts）
+        description: "是否创建 GitHub Release 并上传已签名 APK（默认只构建并上传 Artifacts）"
         type: boolean
         default: false
       release_tag:
-        description: Release 标签（例如 v1.0.0）；留空则使用 eta-<运行编号>
+        description: "Release 标签（例如 v3.0.6）；留空则使用 v<版本号>"
         type: string
         required: false
         default: ""
@@ -20,12 +36,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: android-build-${{ github.ref }}
+  group: android-release-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-apks:
-    name: 构建 Debug 与 Release APK
+  build-release-apk:
+    name: 构建 Release APK
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
@@ -55,6 +71,59 @@ jobs:
       - name: 安装 Android SDK 37
         run: sdkmanager --channel=3 "platforms;android-37.0"
 
+      - name: 解析版本号
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_VERSION_CODE: ${{ inputs.version_code }}
+        run: |
+          set -euo pipefail
+
+          raw="${INPUT_VERSION:-}"
+          # 标签触发时（v3.0.6）直接用标签作为版本号
+          if [[ -z "$raw" && "$GITHUB_REF_TYPE" == "tag" ]]; then
+            raw="$GITHUB_REF_NAME"
+          fi
+          raw="${raw#v}"
+          raw="${raw#V}"
+
+          if [[ -z "$raw" ]]; then
+            # 从 app/build.gradle.kts 读取默认值：versionName = ciVersionName ?: "3.0.5"
+            version_name="$(sed -n 's/.*versionName[^"]*"\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)"
+            if [[ -z "$version_name" ]]; then
+              echo "::error::无法从 app/build.gradle.kts 解析 versionName，请显式填写 version 输入。"
+              exit 1
+            fi
+            echo "未指定版本号，使用仓库中的 versionName：$version_name"
+          elif [[ "$raw" =~ ^[0-9]+$ ]]; then
+            # 306 -> 3.0.6
+            version_name="$(sed 's/./&./g; s/\.$//' <<<"$raw")"
+            echo "版本号 $raw 解析为：$version_name"
+          elif [[ "$raw" =~ ^[0-9]+(\.[0-9]+)+$ ]]; then
+            version_name="$raw"
+          else
+            echo "::error::版本号格式无效：$raw（示例：3.0.6 或 306）"
+            exit 1
+          fi
+
+          version_code="${INPUT_VERSION_CODE:-}"
+          if [[ -z "$version_code" ]]; then
+            version_code="$(date -u +%Y%m%d)01"
+            echo "未指定 versionCode，自动使用：$version_code"
+          elif [[ ! "$version_code" =~ ^[0-9]+$ ]]; then
+            echo "::error::versionCode 必须是纯数字：$version_code"
+            exit 1
+          fi
+
+          repo_code="$(sed -n 's/.*versionCode *= *[^0-9]*\([0-9]\{1,\}\).*/\1/p' app/build.gradle.kts | head -n 1)"
+          if [[ -n "$repo_code" && "$version_code" -le "$repo_code" ]]; then
+            echo "::warning::versionCode $version_code 不大于仓库中的 $repo_code，覆盖安装时可能被系统拒绝。"
+          fi
+
+          echo "version_name=$version_name" >> "$GITHUB_OUTPUT"
+          echo "version_code=$version_code" >> "$GITHUB_OUTPUT"
+          echo "构建版本：$version_name ($version_code)"
+
       - name: 还原发布证书
         env:
           ETA_RELEASE_KEYSTORE_BASE64: ${{ secrets.ETA_RELEASE_KEYSTORE_BASE64 }}
@@ -73,29 +142,29 @@ jobs:
             | base64 --decode \
             > "$RUNNER_TEMP/eta-release.jks"
 
-      - name: 构建 Debug 与 Release APK
+      - name: 构建 Release APK
         env:
+          ETA_VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          ETA_VERSION_CODE: ${{ steps.version.outputs.version_code }}
           ETA_RELEASE_STORE_FILE: ${{ runner.temp }}/eta-release.jks
           ETA_RELEASE_STORE_PASSWORD: ${{ secrets.ETA_RELEASE_STORE_PASSWORD }}
           ETA_RELEASE_KEY_ALIAS: ${{ secrets.ETA_RELEASE_KEY_ALIAS }}
           ETA_RELEASE_KEY_PASSWORD: ${{ secrets.ETA_RELEASE_KEY_PASSWORD }}
         run: >-
           ./gradlew --no-daemon --no-configuration-cache
-          :app:assembleDebug :app:assembleRelease
+          :app:assembleRelease
 
       - name: 验证并整理 APK
         id: apk
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
         run: |
-          debug_apk="app/build/outputs/apk/debug/app-debug.apk"
+          set -euo pipefail
           release_apk="app/build/outputs/apk/release/app-release.apk"
           output_dir="$RUNNER_TEMP/apks"
           apksigner_path="$(find "$ANDROID_HOME/build-tools" \
             -type f -name apksigner | sort -V | tail -n 1)"
 
-          if [[ ! -f "$debug_apk" ]]; then
-            echo "::error::未找到 Debug APK。"
-            exit 1
-          fi
           if [[ ! -f "$release_apk" ]]; then
             echo "::error::未找到 Release APK。"
             exit 1
@@ -105,24 +174,15 @@ jobs:
             exit 1
           fi
 
-          "$apksigner_path" verify "$release_apk"
+          "$apksigner_path" verify --print-certs "$release_apk"
           mkdir -p "$output_dir"
-          cp "$debug_apk" "$output_dir/app-debug.apk"
-          cp "$release_apk" "$output_dir/app-release.apk"
-          echo "debug_path=$output_dir/app-debug.apk" >> "$GITHUB_OUTPUT"
-          echo "release_path=$output_dir/app-release.apk" >> "$GITHUB_OUTPUT"
-
-      - name: 上传 Debug APK
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          path: ${{ steps.apk.outputs.debug_path }}
-          archive: false
-          if-no-files-found: error
-          retention-days: 14
+          cp "$release_apk" "$output_dir/eta-${VERSION_NAME}-release.apk"
+          echo "release_path=$output_dir/eta-${VERSION_NAME}-release.apk" >> "$GITHUB_OUTPUT"
 
       - name: 上传 Release APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
+          name: eta-${{ steps.version.outputs.version_name }}-release-apk
           path: ${{ steps.apk.outputs.release_path }}
           archive: false
           if-no-files-found: error
@@ -133,8 +193,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
         run: |
-          tag="${RELEASE_TAG:-eta-${{ github.run_number }}}"
+          set -euo pipefail
+          tag="${RELEASE_TAG:-v${VERSION_NAME}}"
           if gh release view "$tag" --repo "${{ github.repository }}" >/dev/null 2>&1; then
             echo "::error::Release $tag 已存在，请通过 release_tag 指定其它标签。"
             exit 1
@@ -143,5 +205,5 @@ jobs:
             "${{ steps.apk.outputs.release_path }}" \
             --repo "${{ github.repository }}" \
             --target "${{ github.sha }}" \
-            --title "$tag" \
+            --title "Eta ${VERSION_NAME}" \
             --generate-notes

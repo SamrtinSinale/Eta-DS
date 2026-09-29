@@ -25,28 +25,52 @@ gh secret set ETA_RELEASE_KEY_ALIAS
 gh secret set ETA_RELEASE_KEY_PASSWORD
 ```
 
-## 构建与发布
+## 构建
 
-以下情况会在同一次工作流中生成 Debug APK 和经过签名验证的 Release APK，
-并作为两个可直接下载的 Actions Artifact 保存 14 天：
+`Eta Release Build` 工作流**只构建 Release（签名）APK**，不再构建 Debug APK。
+三种触发方式：
 
-- 向 `main` 推送提交
-- 推送 `v*` 标签
-- 在 GitHub 的 `Actions > Eta Build` 中手动运行
+| 触发方式 | 版本号来源 | 是否发布 GitHub Release |
+| --- | --- | --- |
+| 推送到 `main` | 仓库中的 `versionName` | 否，只上传 Artifact |
+| 推送 `v*` 标签 | 标签名（`v3.0.6` → `3.0.6`） | 否，只上传 Artifact |
+| 手动 `workflow_dispatch` | 手动填写的 `version` | 由 `publish_release` 决定 |
 
-工作流不会创建、修改或发布 GitHub Release。
+每次构建都会先用 `apksigner` 校验签名，再把 APK 作为 Artifact
+`eta-<版本号>-release-apk` 保存 14 天。
 
-正式发布前先更新 `versionCode` 和 `versionName`，然后创建与
-`versionName` 对应的标签。例如发布 `2.2.2`：
+## 手动构建与发布
+
+在 `Actions > Eta Release Build > Run workflow` 中填写：
+
+- **version**：版本号，可以写 `3.0.6`，也可以只写 `306`（会自动展开成 `3.0.6`）。
+  留空则使用 `app/build.gradle.kts` 里的 `versionName`。
+- **version_code**：`versionCode`，纯数字。留空时自动使用 `<今天 yyyyMMdd>01`
+  （例如 `2026092901`）。它必须大于上一次发布的 `versionCode`，否则 Android
+  会拒绝覆盖安装，工作流会给出警告。
+- **publish_release**：是否创建 GitHub Release 并上传已签名 APK。默认关闭，
+  此时只在 Artifact 中产出 APK。
+- **release_tag**：Release 标签，例如 `v3.0.6`。留空时使用 `v<版本号>`。
+
+版本号通过环境变量 `ETA_VERSION_NAME` / `ETA_VERSION_CODE` 传给 Gradle，
+**不会**回写 `app/build.gradle.kts`。如果希望仓库里的默认版本号也跟着更新，
+发布后手动提交一次：
 
 ```bash
-git tag v2.2.2
-git push origin v2.2.2
+# 把 3.0.6 写入 app/build.gradle.kts 的 versionName / versionCode
+git commit -am "chore(release): 准备发布 3.0.6"
+git push origin main
 ```
 
-标签推送后，等待 `Eta Build` 工作流完成，然后：
+## 标签发布
 
-1. 从该次工作流的 `Artifacts` 下载 `app-release.apk`。
-2. 在仓库的 `Releases > Draft a new release` 中选择已有标签。
-3. 填写 Release Notes 并上传 APK。
-4. 检查版本、说明和附件后，由维护者手动发布。
+如果更习惯用标签发布，可以只构建不发布：
+
+```bash
+git tag v3.0.6
+git push origin v3.0.6
+```
+
+标签推送只会生成 Artifact。要真正创建 GitHub Release，仍需在
+`Eta Release Build` 中手动运行一次并打开 `publish_release`，
+或在工作流跑完后从 `Artifacts` 下载 APK 手动创建 Release。

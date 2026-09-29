@@ -16,6 +16,11 @@ val hasReleaseSigning = listOf(
     releaseKeyPassword
 ).all { !it.isNullOrBlank() }
 
+// CI 可以在构建时覆盖版本号（见 .github/workflows/android-release.yml 的 version / version_code 输入）。
+// 本地构建不设置这两个变量，下面的默认值保持不变。
+val ciVersionName = System.getenv("ETA_VERSION_NAME")?.takeIf { it.isNotBlank() }
+val ciVersionCode = System.getenv("ETA_VERSION_CODE")?.trim()?.toIntOrNull()
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(25)
@@ -32,8 +37,9 @@ android {
         minSdk = 34
         targetSdk = 36
         // versionCode 规则：yyyyMMdd + 两位当日序号（01 起），发版时随 versionName 一起手动递增。
-        versionCode = 2026092301
-        versionName = "3.0.5"
+        // 通过 CI 构建时可由 ETA_VERSION_NAME / ETA_VERSION_CODE 覆盖。
+        versionCode = ciVersionCode ?: 2026092301
+        versionName = ciVersionName ?: "3.0.5"
     }
 
     signingConfigs {
