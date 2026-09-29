@@ -256,3 +256,22 @@ jobs:
 
       - name: 运行单元测试
         run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
+
+      - name: 输出失败详情
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob
+          import xml.etree.ElementTree as ET
+
+          failed = 0
+          for path in sorted(glob.glob("app/build/test-results/testDebugUnitTest/*.xml")):
+              for case in ET.parse(path).getroot().iter("testcase"):
+                  for failure in list(case.findall("failure")) + list(case.findall("error")):
+                      failed += 1
+                      print("=" * 72)
+                      print(f"{case.get('classname')} > {case.get('name')}")
+                      print((failure.get("message") or "").strip())
+                      print((failure.text or "").strip()[:3000])
+          print(f"总计失败 {failed} 个")
+          PY

@@ -54,7 +54,8 @@ internal class DshWebSession(
     companion object {
         const val COMMAND = "dsh --patch " + DshMcpBridge.PATCH_PATH + " --profile web --no-open"
         fun addressFromLogs(text: String): String? = WEB_URL_REGEX.find(text)?.value
+        // dsh web 打印的是 `/?token=`（历史 Kimi 是 `#token=`），两者都要认；
         // token 字符集收紧到 URL safe，避免把日志里的 ANSI 序列尾巴吃进来。
-        private val WEB_URL_REGEX = Regex("""http://127\.0\.0\.1:\d+/?token=[A-Za-z0-9_-]+""")
+        private val WEB_URL_REGEX = Regex("""http://127\.0\.0\.1:\d+/[?#]token=[A-Za-z0-9_-]+""")
     }
 }
