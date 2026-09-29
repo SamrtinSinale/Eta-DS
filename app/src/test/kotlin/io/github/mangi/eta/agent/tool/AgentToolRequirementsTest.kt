@@ -1,6 +1,7 @@
 package io.github.mangi.eta.agent.tool
 
 import io.github.mangi.eta.agent.model.AgentToolCatalog
+import io.github.mangi.eta.agent.roleplay.CharacterMemoryTools
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -86,7 +87,10 @@ class AgentToolRequirementsTest {
         deviceSensitiveReadTools = true, deviceSensitiveActionTools = true,
         skillGitHubDiscovery = true, skillGitHubInstall = true, memoryTools = true,
         capabilities = AgentToolCapabilities(rootAvailable = root),
-    )
+    ).also {
+        // 角色会话的剧情记忆工具是运行期追加进目录的，登记表里同样有它们。
+        CharacterMemoryTools.appendSchemas(it)
+    }
 
     private fun JSONArray.names(): Set<String> = (0 until length()).mapTo(linkedSetOf()) {
         getJSONObject(it).getJSONObject("function").getString("name")

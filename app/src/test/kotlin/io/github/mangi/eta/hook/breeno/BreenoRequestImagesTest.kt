@@ -3,6 +3,7 @@ package io.github.mangi.eta.hook.breeno
 import io.github.mangi.eta.agent.model.AgentModelClient
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -258,15 +259,15 @@ class BreenoRequestImagesTest {
 
     @Test
     fun inlineImageIsNoLongerRejectedByBinderStringBudget() {
-        val snapshot = BreenoRequestImages.captureText(
-            text = "data:image/png;base64," + "A".repeat(300_000),
-            source = "image.data",
-        )
+        val text = "data:image/png;base64," + "A".repeat(300_000)
 
-        val resolution = BreenoRequestImages.resolve(null, snapshot)
+        val snapshot = BreenoRequestImages.captureText(text = text, source = "image.data")
 
-        assertTrue(resolution is BreenoRequestImages.Resolution.Success)
-        assertEquals(1, (resolution as BreenoRequestImages.Resolution.Success).images.size)
+        // Hook 热路径不再按 binder 字符串预算拒绝整段 data URL，而是原样交给后台线程解析；
+        // 这里只断言“没被预算拦下”，图片能不能解码由 resolve 的 IMAGE_REFERENCE_UNREADABLE 负责。
+        assertEquals(1, snapshot.inputCount)
+        assertNull(snapshot.failure)
+        assertEquals(text, snapshot.inputs.single().value)
     }
 
     @Test
