@@ -20,16 +20,21 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * 用 DeepSeek Harness 作为执行内核：一次 run 对应一条 ACP 会话轮次。
+ * 用 DeepSeek Harness 作为执行内核：一次 run 对应 dsh 会话里的一个回合。
  *
  * 与 AgentRuntimeRunExecutor 的分工：
  * - 这里只负责驱动 ACP，并把会话更新翻译成 [AgentEvent] 交给既有 UI 管线；
  * - 工具执行不在这里发生 —— dsh 通过 MCP 调用 Eta 暴露的本地工具端点，
  *   权限检查仍在 AgentLocalTools.execute 内部完成；
  * - 模型、地址与凭据直接取 run 请求里已冻结的配置，用户在 Heta 配置一次即可。
+ *
+ * 会话续接：dsh 自己持久化会话，第二回合起用 `session/resume` 带着完整上下文接着聊，
+ * 只把新消息发过去；只有首回合（或历史分叉、换模型、会话丢失）才 `session/new`
+ * 并注入历史摘要（见 [promptWithHistory]）。
  */
 internal class DshAcpRuntime(
     private val config: DshRuntimeConfig,
+    private val sessionStore: DshAcpSessionStore? = null,
 ) {
     fun execute(session: AgentRuntimeSession, request: AgentRuntimeWire.RunRequest): Boolean {
         val text = request.prompt?.trim().orEmpty()
@@ -37,13 +42,24 @@ internal class DshAcpRuntime(
             finishWithFailure(session, "消息为空")
             return false
         }
-        val promptText = promptWithHistory(request, text)
-        Log.i(TAG, "prompt: history=${request.history.size} msgs, chars=${promptText.length}")
+        val sessionKey = request.effectiveModelSessionId
+        // 只有历史仍是上次那段前缀、且模型没换，才允许续接；否则重开会话并注入历史。
+        val stored = sessionStore?.load(sessionKey)
+        val resumable = stored?.let {
+            DshAcpSessionStateCodec.canResume(it, request.history, config.model, config.providerRoute)
+        } == true
+        // resume 时 dsh 自己带着上下文，只发这一轮的新消息；重开会话才需要历史摘要。
+        val promptText = if (resumable) text else promptWithHistory(request, text)
+        Log.i(
+            TAG,
+            "prompt: history=${request.history.size} msgs, chars=${promptText.length}, " +
+                "resume=${if (resumable) stored?.sessionId else "none"}",
+        )
         val runId = session.runId
         var round = 0
         var contentChars = 0
-        // dsh 不保存自己的会话：把这一轮做过什么回写成 Eta 的历史消息，
-        // 否则 checkpoint 里只剩用户消息，下一轮它什么都不记得。
+        // 这一轮做过什么仍要回写成 Eta 的历史消息：UI 与 checkpoint 只认 Eta 的会话，
+        // dsh 自己的会话是"另一份账"（用于续接上下文），两边都要有。
         val transcript = DshTranscriptBuilder(runId)
         // ACP 是流式的：正文与思考要自己累积，收尾时随结果一起交回，否则 UI 只有增量没有终态。
         val assistantText = StringBuilder()
@@ -214,20 +230,43 @@ internal class DshAcpRuntime(
         return try {
             client.start()
             Log.i(TAG, "acp process spawned")
+            var record: DshAcpSessionState? = null
             runBlocking {
                 client.initialize()
-                val sessionId = client.newSession(
+                val resumableId = stored?.sessionId?.takeIf { resumable }
+                val resumedId = resumableId?.let { id ->
+                    runCatching {
+                        client.resumeSession(
+                            sessionId = id,
+                            cwd = config.workingDirectory,
+                            mcpServers = config.mcpServers(),
+                        )
+                    }.onFailure { Log.w(TAG, "resume $id failed: ${it.safeLogType()}") }.getOrNull()
+                }
+                val dshSessionId = resumedId ?: client.newSession(
                     cwd = config.workingDirectory,
                     mcpServers = config.mcpServers(),
                 )
+                // 会话身份变化都要落盘：新会话要记住新 id，续接要更新它见过的那段历史前缀。
+                // 指纹记的是"本轮请求的历史"——下一轮请求的历史一定以它为前缀。
+                record = DshAcpSessionState(
+                    sessionId = dshSessionId,
+                    historyCount = request.history.size,
+                    historyFingerprint = DshAcpSessionStateCodec.fingerprint(
+                        request.history,
+                        request.history.size,
+                    ),
+                    model = config.model,
+                    providerRoute = config.providerRoute,
+                )
                 if (config.providerRoute.isNotBlank() && config.model.isNotBlank()) {
-                    runCatching { client.setModel(sessionId, config.providerRoute, config.model) }
+                    runCatching { client.setModel(dshSessionId, config.providerRoute, config.model) }
                         .onFailure { Log.w(TAG, "set model failed: ${it.safeLogType()}") }
                 }
                 // 会话里选的思考强度要真的传下去，否则 dsh 一直用它自己的默认档（high），
                 // 对话里的「思考」开关就成了摆设。
                 dshEffort(request.config.effectiveReasoningEffort)?.let { effort ->
-                    runCatching { client.setConfigOption(sessionId, CONFIG_REASONING_EFFORT, effort) }
+                    runCatching { client.setConfigOption(dshSessionId, CONFIG_REASONING_EFFORT, effort) }
                         .onSuccess { Log.i(TAG, "reasoning effort: $effort") }
                         .onFailure { Log.w(TAG, "setting reasoning effort failed: ${it.message}") }
                 }
@@ -241,10 +280,13 @@ internal class DshAcpRuntime(
                     )
                 )
                 session.emit(AgentEvent.RoundStarted(round = round, messageCount = 1))
-                promptWithRetry(client, sessionId, promptText)
+                promptWithRetry(client, dshSessionId, promptText)
             }
             closeOpenBlock()
             val transcriptMessages = transcript.build()
+            // 记录"下一轮请求里会原样出现的那段前缀"：就是本轮请求的历史。
+            // 下一轮的历史 = 本轮历史 + 本轮提示 + 本轮产出，所以这段前缀一定还在开头。
+            record?.let { persisted -> sessionStore?.save(sessionKey, persisted) }
             session.emit(AgentEvent.RunFinished(round = round, contentChars = contentChars))
             session.complete(
                 AgentRuntimeWire.RunResult(
@@ -294,6 +336,9 @@ internal class DshAcpRuntime(
 
     /**
      * 把对话历史压成一段纯文本随提示一起交给 dsh。
+     *
+     * 只在**重开** dsh 会话时调用：首回合、历史分叉（编辑／重新生成）、换模型，或
+     * resume 失败。能续接时 dsh 自己带着完整上下文，不需要这段摘要。
      *
      * 踩过的坑：早先只取 content 非空的历史行，而长会话的尾巴几乎全是工具卡片与思考卡片
      * （这些行的 content 是空的，内容挂在 tool_name／result_summary 上），于是"最近 20 条"
@@ -537,7 +582,12 @@ internal class DshAcpRuntime(
                 apiKey = modelConfig.apiKey,
                 baseUrl = modelConfig.baseUrl,
             ) ?: return null
-            return DshAcpRuntime(resolved)
+            return DshAcpRuntime(
+                config = resolved,
+                sessionStore = runCatching { DshAcpSessionStore.create(context) }
+                    .onFailure { Log.w(TAG, "session store unavailable: ${it.safeLogType()}") }
+                    .getOrNull(),
+            )
         }
 
         /**
@@ -592,8 +642,8 @@ internal class DshAcpRuntime(
 /**
  * 把 dsh 的 ACP 流（思考／正文／工具调用／工具结果）重新拼回 Eta 的历史消息。
  *
- * dsh 每次提问都是一次性的 ACP 会话，不会把这一轮做过什么写回 Eta；
- * 没有这个回写，checkpoint 里就只剩用户消息，下一轮 dsh 从零开始（反复重读、轮数暴涨）。
+ * Eta 的 UI、checkpoint 与历史注入都只认 Eta 自己的会话；dsh 的会话是另一份账
+ * （用于续接上下文），不会写回 Eta。没有这个回写，checkpoint 里就只剩用户消息。
  * 形态对齐旧内核：一段 assistant 输出（可带 tool_calls）+ 若干条 tool 结果。
  */
 private class DshTranscriptBuilder(private val runId: String) {

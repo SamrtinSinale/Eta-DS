@@ -20,7 +20,8 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * 协议要点（已实测）：
  * - 换行分隔的 JSON-RPC 2.0，标准输出专供协议帧，日志走标准错误
- * - initialize / session/new / session/set_config_option / session/prompt
+ * - initialize / session/new / session/resume / session/set_config_option / session/prompt
+ * - dsh 自己会把会话持久化，`session/resume` 能带着完整上下文接着聊（不必每轮重放历史）
  * - 会话过程中的 `session/update` 通知承载流式内容：
  *   agent_message_chunk、agent_thought_chunk、tool_call、tool_call_update、usage_update
  * - prompt 请求在轮次结束时返回 stopReason(如 end_turn)
@@ -99,6 +100,27 @@ internal class DshAcpClient(
             ?: throw DshAcpException("session/new 未返回 sessionId")
         sessionId = id
         return id
+    }
+
+    /**
+     * 续接一个已持久化的 dsh 会话。
+     *
+     * 约束（dsh 侧实测）：会话必须已落盘、不是 subagent、且 [cwd] 与建会话时一致；
+     * 不满足时 dsh 回 invalidParams，调用方应回退到 [newSession]。
+     */
+    suspend fun resumeSession(
+        sessionId: String,
+        cwd: String,
+        mcpServers: List<JSONObject> = emptyList(),
+    ): String {
+        val params = JSONObject()
+            .put("sessionId", sessionId)
+            .put("cwd", cwd)
+            .put("mcpServers", JSONArray().also { array -> mcpServers.forEach(array::put) })
+        val result = request(METHOD_SESSION_RESUME, params, timeoutMs = SESSION_TIMEOUT_MS)
+        val resumed = result.optString("sessionId").takeIf { it.isNotBlank() } ?: sessionId
+        this.sessionId = resumed
+        return resumed
     }
 
     /** 设置会话广告出来的任意配置项（模型、思考强度……）。 */
@@ -309,6 +331,7 @@ internal class DshAcpClient(
         private const val JSONRPC = "2.0"
         private const val PROTOCOL_VERSION = 1
         private const val METHOD_SESSION_UPDATE = "session/update"
+        private const val METHOD_SESSION_RESUME = "session/resume"
         private const val METHOD_REQUEST_PERMISSION = "session/request_permission"
         private const val METHOD_SET_CONFIG_OPTION = "session/set_config_option"
         private const val ALLOW_ONCE = "allow-once"
