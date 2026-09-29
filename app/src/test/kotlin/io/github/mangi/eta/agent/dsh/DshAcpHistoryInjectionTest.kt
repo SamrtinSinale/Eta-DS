@@ -74,8 +74,15 @@ class DshAcpHistoryInjectionTest {
             message("assistant", "中".repeat(3_000)),
             message("user", "新".repeat(3_000)),
         )
-        val lines = DshAcpRuntime.collectHistoryLines(history, budgetChars = 6_500)
-        // 最新两条放得下，第三条（更旧）放不下就停：宁可少注入，也不拼出缺中间环节的一段。
+        // 单条上限放宽到不截断：默认的 2000 字符上限会把三条各压到 2000，
+        // 合计 6008 仍小于预算，测不出"放不下就停"。
+        val lines = DshAcpRuntime.collectHistoryLines(
+            history,
+            budgetChars = 6_500,
+            maxCharsPerMessage = 4_000,
+        )
+        // 最新两条放得下（3003 + 3002 = 6005），第三条（更旧，3003）放不下就停：
+        // 宁可少注入，也不拼出缺中间环节的一段。
         assertEquals(2, lines.size)
         assertTrue(lines.last().endsWith("新".repeat(3_000)))
         assertTrue(lines.first().startsWith("你："))
