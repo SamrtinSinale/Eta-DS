@@ -198,7 +198,7 @@ class DetachedTaskSupervisorTest {
             id = "dm_linux01",
             pid = 1234,
             token = "token",
-            command = "kimi web",
+            command = "dsh web",
             cwd = "/workspace",
             identity = "root",
             environment = TerminalEnvironment.DEBIAN,

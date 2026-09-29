@@ -66,12 +66,12 @@ The runtime also manages streaming events, steering, cancellation, and increment
 You can use Eta's terminal yourself or let the agent use it. Each session retains its working directory and environment. The compact view groups input and output by command; the PTY console supports TUIs, keyboard shortcuts, and ANSI rendering. Asynchronous commands and daemon tasks have logs and explicit stop controls.
 
 - **Linux environments:** choose Alpine or Debian. PRoot works without root; rooted devices can also use chroot. The backends have separate installations, with no automatic data migration. PRoot's simulated root identity does not grant Android system privileges.
-- **Development tools:** install Python, Node.js, SSH, APK analysis tools, and Kimi Code as needed.
+- **Development tools:** install Python, Node.js, SSH, APK analysis tools, and DeepSeek Harness as needed.
 - **File management:** import and export files through the private workspace, share accessible Android directories under `/workspace/mounts/` in Linux, and browse Linux files from the app.
 
-Eta itself can read projects, edit code, run commands, and verify results. For longer coding sessions on a phone, [Kimi Code](https://github.com/MoonshotAI/kimi-code)'s **Kimi Web** offers a web UI well suited to mobile. Continue a conversation, inspect code changes, and review execution results in your browser, with a full coding-agent workflow for vibe coding wherever you are.
+Eta itself can read projects, edit code, run commands, and verify results. For longer coding sessions on a phone, [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)'s **dsh Web** offers a web UI well suited to mobile. Continue a conversation, inspect code changes, and review execution results in your browser, with a full coding-agent workflow for vibe coding wherever you are.
 
-After installing Linux, Node.js, and Kimi Code in Eta, launch Kimi Web from the home screen or run `kimi` in the terminal. Kimi has its own model configuration and sessions, so it requires a separate sign-in or setup. You can return to a running instance after leaving the page, or stop it from Eta.
+After installing Linux, Node.js, and DeepSeek Harness in Eta, launch dsh Web from the home screen or run `dsh web` in the terminal. dsh has its own model configuration and sessions, so it requires separate setup. You can return to a running instance after leaving the page, or stop it from Eta.
 
 ## Models and BYOK
 

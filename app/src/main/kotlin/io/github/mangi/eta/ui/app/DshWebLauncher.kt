@@ -83,7 +83,7 @@ internal class DshWebLauncher(
         val matches = daemonSupervisor.list().filter {
             it.task.environment == environment && it.task.identity == identity &&
                 it.task.backend == LinuxEnvironmentPaths.backendOf(rootfs.path) &&
-                it.task.command.trim() in setOf(DshWebSession.COMMAND, "kimi web")
+                it.task.command.trim() == DshWebSession.COMMAND
         }
         val task = matches.lastOrNull { it.running } ?: matches.lastOrNull()
             ?: return@withContext DshWebRuntimeStatus()
@@ -101,6 +101,6 @@ internal class DshWebLauncher(
 
     private companion object {
         val launchMutex = Mutex()
-        const val LAUNCH_ID = "kimi-launch"
+        const val LAUNCH_ID = "dsh-web-launch"
     }
 }

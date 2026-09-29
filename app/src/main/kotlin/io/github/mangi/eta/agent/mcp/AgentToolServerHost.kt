@@ -18,15 +18,15 @@ import java.security.SecureRandom
 /**
  * 持有对外暴露本地工具的 MCP server。
  *
- * 与 Eta 自有的 Agent Loop 并行存在：App 内对话继续走原链路，这里额外把同一份工具目录
- * 开放给外部 agent（DeepSeek Harness）。
+ * App 内对话由 dsh 内核执行（见 `agent/dsh`），dsh 通过这里的 MCP 端点调用手机工具；
+ * 工具目录与旧内核共用同一份实现（`compact` 与 `rewrite_reply` 仍走旧内核）。
  *
  * 权限模型不变：工具清单按设备条件投影，Root / 无障碍 / 敏感开关仍由
  * AgentLocalTools.execute 在执行前逐次检查，这里不做任何放行。
  */
 internal object AgentToolServerHost {
     private const val TAG = "AgentToolServerHost"
-    private const val SERVER_NAME = "eta-mobile"
+    private const val SERVER_NAME = "eda-mobile"
     private const val TOKEN_FILE_NAME = "tool-server.token"
     private const val TOKEN_BYTES = 32
     private const val BROWSER_RUN_ID = "mcp-tool-server"

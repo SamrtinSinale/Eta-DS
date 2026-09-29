@@ -15,7 +15,7 @@ Eta 使用同一个 APK，根据实际授权提供能力。基础功能不会等
 | 当前通知与通知历史 | 授予通知使用权；当前通知要求监听服务已连接 | Root 用户保留已有系统来源 |
 | 应用使用情况、位置 | 授予对应 Android 访问权限 | 后台位置需要始终允许 |
 | Android Shell、文件与图片 | App UID，私有工作区或已授权来源 | Root 用户保留特权路径 |
-| Alpine、Debian、PTY、Kimi Web | 通过 PRoot 运行 | 可另外安装 chroot |
+| Alpine、Debian、PTY、dsh Web | 通过 PRoot 运行 | 可另外安装 chroot |
 | 系统修改、冻结应用、私有数据读取 | 不向模型提供 | 需要 Root；部分数据还要求对应 ROM |
 | 厂商助手接管、Gemini 与一圈即搜 | 可在系统增强中了解 | 需要 LSPosed 与对应 ROM，系统化另需 Root |
 
@@ -33,9 +33,9 @@ PRoot 与 chroot 使用独立 rootfs。旧 chroot、`/data/local/tmp/eta` 与特
 
 ## 运行与停止
 
-普通终端、PRoot tracer 和 Kimi 使用执行前台服务的任务引用维持生命周期。离开页面不停止这些任务；可回到 Eta 打开已就绪的 Kimi 实例，或通过任务入口及执行通知主动停止。最后一个任务结束后释放前台服务。
+普通终端、PRoot tracer 和 dsh Web 使用执行前台服务的任务引用维持生命周期。离开页面不停止这些任务；可回到 Eta 打开已就绪的 dsh Web 实例，或通过任务入口及执行通知主动停止。最后一个任务结束后释放前台服务。
 
-Kimi 使用 `kimi web --no-open`，同一发行版与后端复用实例。失败或取消只回收本次新建实例，已有实例不误杀。Root daemon 沿用原有独立生命周期，不由普通任务服务批量回收。
+dsh Web 使用 `dsh --profile web --no-open`，同一发行版与后端复用实例。失败或取消只回收本次新建实例，已有实例不误杀。Root daemon 沿用原有独立生命周期，不由普通任务服务批量回收。
 
 通知权限拒绝不会直接阻止合法启动。前台服务仍受 Android 的[后台启动限制](https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start)和厂商进程管理影响；启动被拒绝时返回 Eta 重试。强停或重启后不自动重放命令。
 
