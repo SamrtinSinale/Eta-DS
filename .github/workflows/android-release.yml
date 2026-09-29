@@ -225,3 +225,53 @@ jobs:
             --target "${{ github.sha }}" \
             --title "Eta ${VERSION_NAME}" \
             --generate-notes
+
+  unit-tests:
+    name: 单元测试（临时验证）
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: 配置 JDK 25
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: 配置 Gradle
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6
+        with:
+          cache-provider: basic
+
+      - name: 配置 Android SDK 工具
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+        with:
+          packages: ""
+          log-accepted-android-sdk-licenses: false
+
+      - name: 安装 Android SDK 37
+        run: sdkmanager --channel=3 "platforms;android-37.0"
+
+      - name: 运行单元测试
+        run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
+
+      - name: 输出失败详情
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob
+          import xml.etree.ElementTree as ET
+
+          failed = 0
+          for path in sorted(glob.glob("app/build/test-results/testDebugUnitTest/*.xml")):
+              for case in ET.parse(path).getroot().iter("testcase"):
+                  for failure in list(case.findall("failure")) + list(case.findall("error")):
+                      failed += 1
+                      print("=" * 72)
+                      print(f"{case.get('classname')} > {case.get('name')}")
+                      print((failure.get("message") or "").strip())
+                      print((failure.text or "").strip()[:3000])
+          print(f"总计失败 {failed} 个")
+          PY
