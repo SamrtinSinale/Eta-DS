@@ -23,7 +23,7 @@ def download_catalog() -> bytes:
     request = urllib.request.Request(
         CATALOG_URL,
         headers={
-            "User-Agent": "Eta-Catalog-Updater (+https://github.com/Mangi-11/Eta)",
+            "User-Agent": "Eda-Catalog-Updater (+https://github.com/SamrtinSinale/Eda-DS)",
             "Accept": "application/json",
             "Accept-Encoding": "identity",
         },
