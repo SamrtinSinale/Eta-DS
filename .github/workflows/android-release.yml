@@ -193,6 +193,15 @@ jobs:
           fi
           echo "APK 版本校验通过：$apk_version_name ($apk_version_code)"
 
+          # 校验 APK 里真实的 applicationId 与 app/build.gradle.kts 一致
+          expected_package="$(sed -n 's/.*applicationId *= *"\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)"
+          apk_package="$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" <<<"$badging")"
+          if [[ -z "$expected_package" || "$apk_package" != "$expected_package" ]]; then
+            echo "::error::APK applicationId 与预期不一致：APK=$apk_package 预期=$expected_package"
+            exit 1
+          fi
+          echo "APK applicationId 校验通过：$apk_package"
+
           mkdir -p "$output_dir"
           cp "$release_apk" "$output_dir/eta-${VERSION_NAME}-release.apk"
           echo "release_path=$output_dir/eta-${VERSION_NAME}-release.apk" >> "$GITHUB_OUTPUT"

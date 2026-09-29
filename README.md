@@ -2,7 +2,7 @@
 
 **简体中文** | [English](README_EN.md)
 
-<p><a href="https://github.com/SamrtinSinale/Eta-DS/releases"><img src="https://img.shields.io/github/downloads/SamrtinSinale/Eta-DS/total?logo=github&amp;label=%E4%B8%8B%E8%BD%BD%E9%87%8F&amp;color=1677FF" alt="GitHub Releases 累计下载量"></a> <img src="https://img.shields.io/badge/minSdk-34-3DDC84?logo=android&amp;logoColor=white" alt="minSdk 34"> <img src="https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&amp;logoColor=white" alt="Kotlin 2.4.10"> <img src="https://img.shields.io/badge/AGP-9.3.2-3DDC84?logo=android&amp;logoColor=white" alt="AGP 9.3.2"> <img src="https://img.shields.io/badge/Assistant%20Integrations-ColorOS%20%26%20HyperOS-1677FF" alt="Assistant integrations for ColorOS and HyperOS"></p>
+<p><a href="https://github.com/SamrtinSinale/Heta-dsh/releases"><img src="https://img.shields.io/github/downloads/SamrtinSinale/Heta-dsh/total?logo=github&amp;label=%E4%B8%8B%E8%BD%BD%E9%87%8F&amp;color=1677FF" alt="GitHub Releases 累计下载量"></a> <img src="https://img.shields.io/badge/minSdk-34-3DDC84?logo=android&amp;logoColor=white" alt="minSdk 34"> <img src="https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&amp;logoColor=white" alt="Kotlin 2.4.10"> <img src="https://img.shields.io/badge/AGP-9.3.2-3DDC84?logo=android&amp;logoColor=white" alt="AGP 9.3.2"> <img src="https://img.shields.io/badge/Assistant%20Integrations-ColorOS%20%26%20HyperOS-1677FF" alt="Assistant integrations for ColorOS and HyperOS"></p>
 
 **面向 Android 的第三方系统级 AI 助手**
 
@@ -18,7 +18,7 @@ Heta 内置 Agent Runtime，通过 Agent Loop 编排模型调用、工具执行�
 
 支持 **Android 14 及以上版本**，App 本体不限手机品牌，基础功能无需 Root。Root 和 LSPosed 可进一步扩展系统访问与助手入口，具体能力取决于授权和 ROM 适配。
 
-[下载 APK](https://github.com/SamrtinSinale/Eta-DS/releases) · [快速开始](#快速开始) · [为什么做 Heta](#为什么做-heta)
+[下载 APK](https://github.com/SamrtinSinale/Heta-dsh/releases) · [快速开始](#快速开始) · [为什么做 Heta](#为什么做-heta)
 
 ## 界面预览
 
@@ -115,7 +115,7 @@ Provider 层支持 OpenAI-compatible Chat Completions、Responses API 和 Anthro
 
 ## 快速开始
 
-1. 从 [Releases](https://github.com/SamrtinSinale/Eta-DS/releases) 下载 APK，安装后在“模型提供商”中填写 API Key 并选择模型。执行任务需要 Tool Calling，理解图片还需模型支持图片输入。
+1. 从 [Releases](https://github.com/SamrtinSinale/Heta-dsh/releases) 下载 APK，安装后在“模型提供商”中填写 API Key 并选择模型。执行任务需要 Tool Calling，理解图片还需模型支持图片输入。
 2. 按任务需要配置工具开关与权限：GUI Agent 需要无障碍服务；通知、应用使用情况分别授权；位置工具需要“始终允许”。工具页可查看当前设备的可用能力。
 3. 开始对话。需要 Linux 时，在“Linux 工具环境”中安装发行版、基础工具及所需开发工具；需要系统入口时，参见[系统助手入口](#系统助手入口)。
 
@@ -188,7 +188,7 @@ Heta 先从现有 Android 上的模型、上下文与工具做起。真正落地
 
 ## 上游与许可证
 
-本仓库是 [Mangi-11/Eta](https://github.com/Mangi-11/Eta) 的 fork，改动限于应用名称（Heta）、`applicationId`（`io.sartin.eats`）与部分界面文案，功能实现来自上游。
+本仓库是 [Mangi-11/Eta](https://github.com/Mangi-11/Eta) 的 fork，改动限于应用名称（Heta）、`applicationId`（`io.sartin.heta`）与部分界面文案，功能实现来自上游。
 
 代码沿用上游的 [PolyForm Noncommercial License 1.0.0](LICENSE)，版权归原作者[蛮吉（Mangi-11）](https://github.com/Mangi-11)所有，`LICENSE` 末尾的 Required Notice 原样保留。按该许可证，非商业用途可使用、修改和分发；贩卖、收费代装及其他商业使用需先取得原作者书面授权。
 

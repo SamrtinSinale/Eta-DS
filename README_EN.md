@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | **English**
 
-<p><a href="https://github.com/SamrtinSinale/Eta-DS/releases"><img src="https://img.shields.io/github/downloads/SamrtinSinale/Eta-DS/total?logo=github&amp;label=Downloads&amp;color=1677FF" alt="Total GitHub Releases downloads"></a> <img src="https://img.shields.io/badge/minSdk-34-3DDC84?logo=android&amp;logoColor=white" alt="minSdk 34"> <img src="https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&amp;logoColor=white" alt="Kotlin 2.4.10"> <img src="https://img.shields.io/badge/AGP-9.3.2-3DDC84?logo=android&amp;logoColor=white" alt="AGP 9.3.2"> <img src="https://img.shields.io/badge/Assistant%20Integrations-ColorOS%20%26%20HyperOS-1677FF" alt="Assistant integrations for ColorOS and HyperOS"></p>
+<p><a href="https://github.com/SamrtinSinale/Heta-dsh/releases"><img src="https://img.shields.io/github/downloads/SamrtinSinale/Heta-dsh/total?logo=github&amp;label=Downloads&amp;color=1677FF" alt="Total GitHub Releases downloads"></a> <img src="https://img.shields.io/badge/minSdk-34-3DDC84?logo=android&amp;logoColor=white" alt="minSdk 34"> <img src="https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&amp;logoColor=white" alt="Kotlin 2.4.10"> <img src="https://img.shields.io/badge/AGP-9.3.2-3DDC84?logo=android&amp;logoColor=white" alt="AGP 9.3.2"> <img src="https://img.shields.io/badge/Assistant%20Integrations-ColorOS%20%26%20HyperOS-1677FF" alt="Assistant integrations for ColorOS and HyperOS"></p>
 
 **A third-party, system-level AI assistant for Android**
 
@@ -18,7 +18,7 @@ Heta has its own agent runtime. An agent loop coordinates model requests, tool e
 
 Requires **Android 14 or later**. The app works across phone brands, and core features do not require root. Root and LSPosed extend system access and assistant integration where permissions and ROM compatibility allow.
 
-[Download APK](https://github.com/SamrtinSinale/Eta-DS/releases) · [Getting started](#getting-started) · [Why I built Heta](#why-i-built-heta)
+[Download APK](https://github.com/SamrtinSinale/Heta-dsh/releases) · [Getting started](#getting-started) · [Why I built Heta](#why-i-built-heta)
 
 ## See it in action
 
@@ -105,7 +105,7 @@ System tools, sensitive reads, sensitive actions, terminal and file access, brow
 
 ## Getting started
 
-1. Download the APK from [Releases](https://github.com/SamrtinSinale/Eta-DS/releases). After installation, open **Model provider** in Settings, enter your API key, and select a model. Task execution requires tool calling; interpreting images also requires image input support.
+1. Download the APK from [Releases](https://github.com/SamrtinSinale/Heta-dsh/releases). After installation, open **Model provider** in Settings, enter your API key, and select a model. Task execution requires tool calling; interpreting images also requires image input support.
 2. Enable the tools and permissions you need. GUI control requires Heta's accessibility service. Notification access and usage access are granted separately; location tools require **Allow all the time**. The tools page shows what is available on your device.
 3. Start a conversation. For Linux, install a distribution, base tools, and any development tools you need under **Linux tool environment**. For assistant integration, see [System assistant entry points](#system-assistant-entry-points).
 
@@ -180,7 +180,7 @@ These implementation notes are currently in Chinese:
 
 ## Upstream and license
 
-This repository is a fork of [Mangi-11/Eta](https://github.com/Mangi-11/Eta). Changes are limited to the app name (Heta), the `applicationId` (`io.sartin.eats`), and some user-facing strings; the implementation comes from upstream.
+This repository is a fork of [Mangi-11/Eta](https://github.com/Mangi-11/Eta). Changes are limited to the app name (Heta), the `applicationId` (`io.sartin.heta`), and some user-facing strings; the implementation comes from upstream.
 
 The code stays under the upstream [PolyForm Noncommercial License 1.0.0](LICENSE). Copyright belongs to the original author, [蛮吉 (Mangi-11)](https://github.com/Mangi-11), and the Required Notice at the end of `LICENSE` is kept unchanged. Noncommercial use, modification, and distribution are permitted; sales, paid installation, and other commercial use require prior written permission from the original author.
 
