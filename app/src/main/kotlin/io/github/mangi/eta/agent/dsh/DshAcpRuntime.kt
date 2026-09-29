@@ -26,7 +26,7 @@ import org.json.JSONObject
  * - 这里只负责驱动 ACP，并把会话更新翻译成 [AgentEvent] 交给既有 UI 管线；
  * - 工具执行不在这里发生 —— dsh 通过 MCP 调用 Eta 暴露的本地工具端点，
  *   权限检查仍在 AgentLocalTools.execute 内部完成；
- * - 模型、地址与凭据直接取 run 请求里已冻结的配置，用户在 Eda 配置一次即可。
+ * - 模型、地址与凭据直接取 run 请求里已冻结的配置，用户在 Heta 配置一次即可。
  */
 internal class DshAcpRuntime(
     private val config: DshRuntimeConfig,
@@ -489,7 +489,7 @@ internal class DshAcpRuntime(
         }
 
         /**
-         * Eda 只有 dsh 一个内核：运行时或模型配置不可用时给出明确原因，让上层直接报错，
+         * Heta 只有 dsh 一个内核：运行时或模型配置不可用时给出明确原因，让上层直接报错，
          * 不再静默回退到旧内核（旧内核会把整段历史全量重发，实测 175k tokens／轮、单任务
          * 50 分钟，界面上完全看不出降级）。
          */

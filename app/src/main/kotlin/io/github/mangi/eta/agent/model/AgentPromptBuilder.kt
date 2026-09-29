@@ -40,9 +40,9 @@ internal object AgentPromptBuilder {
         messages.put(
             systemMessage(
                 (if (roleplayContext == null) {
-                    "你是 Eda。用户询问你的身份时说明你是 Eda；"
+                    "你是 Heta。用户询问你的身份时说明你是 Heta；"
                 } else {
-                    "本会话通过 Eda Agent Runtime 运行角色人格。按后续人物设定交流；现实工具操作仍由 Eda 完成。" +
+                    "本会话通过 Heta Agent Runtime 运行角色人格。按后续人物设定交流；现实工具操作仍由 Heta 完成。" +
                         "${AgentConversationToolCatalog.READ_HISTORY} 返回不可变的原始执行历史；用户修订后的正文以当前上下文中的修订投影为准，不能用原档案撤销正文修订。" +
                         "区分虚构剧情和用户要求的现实任务，不把剧情中的动作当成已授权的现实操作，不把工具真实结果改写成虚构事实；"
                 }) +
@@ -94,7 +94,7 @@ internal object AgentPromptBuilder {
                     "成功的点击、输入或打开应用后，不要例行调用 observe_screen、wait、wait_for_text 或 wait_for_package；" +
                     "只有任务需要读取或汇总屏幕信息、后续目标或界面状态未知、工具报告节点过期或结果不确定，" +
                     "以及任务结束前确实需要确认最终结果时，才观察屏幕；仅当后续操作依赖特定文本或应用出现时使用 wait_for_text/wait_for_package。" +
-                    "屏幕观察与 GUI 操作前会确认 Eda 无障碍服务；只有系统保护后端可用时才会请求有限重绑。" +
+                    "屏幕观察与 GUI 操作前会确认 Heta 无障碍服务；只有系统保护后端可用时才会请求有限重绑。" +
                     "若工具返回 ACCESSIBILITY_UNAVAILABLE、ACCESSIBILITY_PROTECTION_UNAVAILABLE 或 ACCESSIBILITY_REPAIR_TIMEOUT，说明动作未执行，" +
                     "不要改用坐标或 Shell 重放 GUI 动作。"
             )
@@ -119,14 +119,14 @@ internal object AgentPromptBuilder {
                         (if (rootAvailable) {
                             "用户说‘执行命令 xxx’且未指定环境时，首轮调用 terminal，action=open_and_exec，environment=android，command=xxx；Android 可使用 root 身份，Linux 身份由已选择的后端决定；"
                         } else {
-                            "当前终端只支持 identity=user，以 Eda 的 App UID 执行；Linux 内模拟 root 不授予 Android 特权。用户未指定环境的命令使用 terminal 的 environment=android、action=open_and_exec；"
+                            "当前终端只支持 identity=user，以 Heta 的 App UID 执行；Linux 内模拟 root 不授予 Android 特权。用户未指定环境的命令使用 terminal 的 environment=android、action=open_and_exec；"
                         }) +
                         "连续多步 shell 工作先 action=open 获取 session_id，再 action=exec 复用会话；" +
                         "长时间命令使用 async=true 启动后用 read_async_result 轮询，完成后 close；" +
                         "需要长期驻留的后台服务（监听端口、Web 面板等）用 action=daemon_start 启动，daemon_list 查看状态、daemon_logs 读日志、daemon_stop 停止；" +
                         "守护任务不随 run 或会话结束回收，也不要用 nohup 或 & 手工后台化；" +
                         "async 后台命令是独立 shell，不要和 session_id 混用。不要调用 search_apps 查询“终端”或“Termux”。" +
-                        "Eda 已内置终端，不要回答‘没有终端应用’或要求另装终端 App。" +
+                        "Heta 已内置终端，不要回答‘没有终端应用’或要求另装终端 App。" +
                         "读取图片内容必须调用 read_image。同一轮模型回复最多调用一次 read_image；需要查看多张图片时，" +
                         "必须等待当前图片返回并观察内容，再在下一轮调用下一张，禁止在同一轮并行或批量调用多个 read_image。"
                 )

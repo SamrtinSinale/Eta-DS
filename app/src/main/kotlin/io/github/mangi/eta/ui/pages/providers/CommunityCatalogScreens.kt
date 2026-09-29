@@ -100,7 +100,7 @@ internal fun CommunityCatalogScreen(
             ProviderSection(title = "目录状态") {
                 EtaPreference(
                     title = "models.dev 社区目录",
-                    summary = "读取目录不会上传 Eda 的 API Key",
+                    summary = "读取目录不会上传 Heta 的 API Key",
                 )
                 EtaPreferenceDivider(hasLeading = false)
                 EtaPreference(

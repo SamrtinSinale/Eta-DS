@@ -37,7 +37,7 @@ class AgentRoleplayRuntimeTest {
             val text = request.messages.toString()
             assertTrue(text.contains("林舟"))
             assertTrue(text.contains("工具合同"))
-            assertFalse(text.contains("你是 Eda。"))
+            assertFalse(text.contains("你是 Heta。"))
             assertFalse(text.contains("PROVIDER_IDENTITY"))
             val names = (0 until request.tools.length()).map {
                 request.tools.getJSONObject(it).getJSONObject("function").getString("name")

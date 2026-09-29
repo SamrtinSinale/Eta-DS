@@ -152,14 +152,14 @@ internal data class DshRuntimeConfig(
         val lines = ArrayList<String>()
         lines += "Your working directory is {{cwd}}."
         lines += ""
-        lines += "技能库：dsh 自带技能在 /root/.dsh/skills；Eda 技能库在 $SKILLS_IN_ROOT（每个技能是 <名字>/SKILL.md，由 Eda App 管理）。"
+        lines += "技能库：dsh 自带技能在 /root/.dsh/skills；Heta 技能库在 $SKILLS_IN_ROOT（每个技能是 <名字>/SKILL.md，由 Heta App 管理）。"
         lines += "任务与某个技能相符时，先读对应技能的 SKILL.md 再执行；需要新技能时用 skills_list_curated / skills_inspect_github 找到，"
-        lines += "再通过 skills_install_from_github 安装——装好后会同步进 Eda 技能库并自动可用。"
+        lines += "再通过 skills_install_from_github 安装——装好后会同步进 Heta 技能库并自动可用。"
         val skills = skillIndex()
         if (skills.isEmpty()) {
             lines += "当前技能库为空。"
         } else {
-            lines += "Eda 技能库现有技能："
+            lines += "Heta 技能库现有技能："
             skills.take(MAX_SKILL_LINES).forEach { (name, description) ->
                 lines += if (description.isBlank()) "- $name" else "- $name：$description"
             }
@@ -205,10 +205,10 @@ internal data class DshRuntimeConfig(
             "/system/bin:/system/xbin:/product/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
         private const val ENV_API_KEY = "DEEPSEEK_API_KEY"
         private const val ENV_BASE_URL = "DEEPSEEK_BASE_URL"
-        private const val MCP_SERVER_NAME = "eda"
+        private const val MCP_SERVER_NAME = "heta"
         private const val MCP_TRANSPORT_HTTP = "http"
-        private const val OVERLAY_RELATIVE = "opt/dsh/eda-run-overlay.patch.yml"
-        private const val OVERLAY_IN_ROOT = "/opt/dsh/eda-run-overlay.patch.yml"
+        private const val OVERLAY_RELATIVE = "opt/dsh/heta-run-overlay.patch.yml"
+        private const val OVERLAY_IN_ROOT = "/opt/dsh/heta-run-overlay.patch.yml"
         private const val SKILLS_TARGET_REL = "root/.agents/skills"
         private const val SKILLS_IN_ROOT = "/root/.agents/skills"
         private const val MAX_SKILL_LINES = 40

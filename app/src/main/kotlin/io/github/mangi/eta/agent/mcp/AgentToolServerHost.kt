@@ -26,7 +26,7 @@ import java.security.SecureRandom
  */
 internal object AgentToolServerHost {
     private const val TAG = "AgentToolServerHost"
-    private const val SERVER_NAME = "eda-mobile"
+    private const val SERVER_NAME = "heta-mobile"
     private const val TOKEN_FILE_NAME = "tool-server.token"
     private const val TOKEN_BYTES = 32
     private const val BROWSER_RUN_ID = "mcp-tool-server"

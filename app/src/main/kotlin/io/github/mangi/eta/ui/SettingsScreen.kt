@@ -729,7 +729,7 @@ private fun SettingsPageContent(
                         onClick = {
                             val intent = android.content.Intent(
                                 android.content.Intent.ACTION_VIEW,
-                                android.net.Uri.parse("https://github.com/Mangi-11/Eda"),
+                                android.net.Uri.parse("https://github.com/Mangi-11/Heta"),
                             )
                             context.startActivity(intent)
                         },
@@ -887,7 +887,7 @@ private fun PowerAssistantTarget.displayName(context: Context): String =
     when (this) {
         PowerAssistantTarget.OEM -> context.getString(R.string.power_assistant_system_default)
         PowerAssistantTarget.GEMINI -> "Gemini"
-        PowerAssistantTarget.ETA -> "Eda"
+        PowerAssistantTarget.ETA -> "Heta"
     }
 
 private fun isAgentAccessibilityEnabled(context: Context): Boolean {

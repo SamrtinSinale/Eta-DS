@@ -524,7 +524,7 @@ fun AgentAppRoot(
                                                     it.execute(
                                                         "am start --user current -n " +
                                                             "com.oplus.battery/com.oplus.powermanager.fuelgaue.PowerControlActivity " +
-                                                            "--es title Eda --es pkgName io.github.mangi.eta --es drainType APP",
+                                                            "--es title Heta --es pkgName io.github.mangi.eta --es drainType APP",
                                                     )
                                                 }
                                             }

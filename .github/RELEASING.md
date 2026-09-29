@@ -1,4 +1,4 @@
-# Eda 发布流程
+# Heta 发布流程
 
 ## 配置签名 Secrets
 
@@ -13,13 +13,13 @@
 macOS 可以用下面的命令复制证书的 Base64 文本：
 
 ```bash
-base64 < /path/to/Eda-release.jks | tr -d '\n' | pbcopy
+base64 < /path/to/Heta-release.jks | tr -d '\n' | pbcopy
 ```
 
 也可以使用 GitHub CLI。密码类 Secret 不要直接写在命令参数中，运行命令后按提示输入：
 
 ```bash
-base64 < /path/to/Eda-release.jks | gh secret set ETA_RELEASE_KEYSTORE_BASE64
+base64 < /path/to/Heta-release.jks | gh secret set ETA_RELEASE_KEYSTORE_BASE64
 gh secret set ETA_RELEASE_STORE_PASSWORD
 gh secret set ETA_RELEASE_KEY_ALIAS
 gh secret set ETA_RELEASE_KEY_PASSWORD
@@ -27,7 +27,7 @@ gh secret set ETA_RELEASE_KEY_PASSWORD
 
 ## 构建
 
-`Eda Release Build` 工作流**只构建 Release（签名）APK**，不再构建 Debug APK。
+`Heta Release Build` 工作流**只构建 Release（签名）APK**，不再构建 Debug APK。
 三种触发方式：
 
 | 触发方式 | 版本号来源 | 是否发布 GitHub Release |
@@ -41,7 +41,7 @@ gh secret set ETA_RELEASE_KEY_PASSWORD
 
 ## 手动构建与发布
 
-在 `Actions > Eda Release Build > Run workflow` 中填写：
+在 `Actions > Heta Release Build > Run workflow` 中填写：
 
 - **version**：版本号，可以写 `3.0.6`，也可以只写 `306`（会自动展开成 `3.0.6`）。
   留空则使用 `app/build.gradle.kts` 里的 `versionName`。
@@ -72,5 +72,5 @@ git push origin v3.0.6
 ```
 
 标签推送只会生成 Artifact。要真正创建 GitHub Release，仍需在
-`Eda Release Build` 中手动运行一次并打开 `publish_release`，
+`Heta Release Build` 中手动运行一次并打开 `publish_release`，
 或在工作流跑完后从 `Artifacts` 下载 APK 手动创建 Release。

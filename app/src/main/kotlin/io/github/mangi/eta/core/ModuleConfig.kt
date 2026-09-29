@@ -3,7 +3,7 @@ package io.github.mangi.eta.core
 import io.github.mangi.eta.BuildConfig
 
 internal object ModuleConfig {
-    const val TAG = "Eda"
+    const val TAG = "Heta"
     const val HOT_PATH_LOG_WINDOW_MS = 60_000L
 
     const val GOOGLE_PACKAGE = "com.google.android.googlequicksearchbox"

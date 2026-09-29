@@ -187,10 +187,10 @@ internal object EtaBackupRepository {
 
     private fun validate(document: EtaBackupDocument) {
         if (document.format != EtaBackupDocument.FORMAT) {
-            throw EtaBackupException("这不是 Eda 备份文件")
+            throw EtaBackupException("这不是 Heta 备份文件")
         }
         if (document.schemaVersion !in 1..EtaBackupDocument.SCHEMA_VERSION) {
-            throw EtaBackupException("不支持的 Eda 备份版本：${document.schemaVersion}")
+            throw EtaBackupException("不支持的 Heta 备份版本：${document.schemaVersion}")
         }
         if (document.catalogRevision < 0) {
             throw EtaBackupException("备份中的模型目录版本无效")

@@ -112,7 +112,7 @@ internal object AgentDeviceToolCatalog {
             .put(
                 function(
                     "search_notification_history",
-                    "检索 Eda 在用户授予通知使用权后记录的最近 7 天通知。原始结果不写入持久会话。",
+                    "检索 Heta 在用户授予通知使用权后记录的最近 7 天通知。原始结果不写入持久会话。",
                     properties(
                         "query" to string("可选标题或正文关键词", 200),
                         "package_name" to string("可选精确包名", 255),

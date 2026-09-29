@@ -299,7 +299,7 @@ internal class DetachedTaskSupervisor(
             if (!acquireUserLease(lease) {
                     stopped.set(true)
                     synchronized(launchLock) { stop(id) }
-                }) return@synchronized DaemonStartResult.Failed("BACKGROUND_START_NOT_ALLOWED", "请返回 Eda 后重新启动后台任务")
+                }) return@synchronized DaemonStartResult.Failed("BACKGROUND_START_NOT_ALLOWED", "请返回 Heta 后重新启动后台任务")
             if (stopped.get()) {
                 releaseUserLease(lease)
                 return@synchronized DaemonStartResult.Failed("TASK_CANCELLED", "后台任务已取消")

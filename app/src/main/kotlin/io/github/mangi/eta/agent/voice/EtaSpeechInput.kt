@@ -83,7 +83,7 @@ internal class EtaSpeechInput(
             return
         }
         if (selection == null) {
-            AndroidAgentLogger.warn("Eda speech unavailable: reason=no_service")
+            AndroidAgentLogger.warn("Heta speech unavailable: reason=no_service")
             onError(EtaSpeechIssue(SpeechRecognizer.ERROR_CLIENT, EtaSpeechIssueKind.NO_SERVICE))
             return
         }
