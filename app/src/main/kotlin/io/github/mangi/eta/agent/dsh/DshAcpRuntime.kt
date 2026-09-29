@@ -174,14 +174,23 @@ internal class DshAcpRuntime(
                         }
 
                         UPDATE_USAGE -> {
+                            // ACP 的 usage_update：used 是当前上下文占用量，size 是窗口本身。
+                            // 早先把 size 写进 inputTokens，于是库里存出 input_tokens=1000000
+                            // 这种假用量；窗口不是输入量，这里只上报占用，窗口只用来自检。
                             val used = update.optInt("used", -1)
                             val size = update.optInt("size", -1)
+                            val configured = request.config.contextWindow
+                            if (size > 0 && configured != null && configured > 0 && size != configured) {
+                                Log.w(
+                                    TAG,
+                                    "context window mismatch: dsh=$size, model config=$configured",
+                                )
+                            }
                             session.emit(
                                 AgentEvent.UsageReceived(
                                     round = round,
                                     usage = AgentTokenUsage(
                                         contextTokens = if (used >= 0) used else null,
-                                        inputTokens = if (size >= 0) size else null,
                                     ),
                                 )
                             )
@@ -284,77 +293,35 @@ internal class DshAcpRuntime(
     }
 
     /**
-     * 每一轮都会新建一个 ACP 会话，dsh 自己不保留跨轮记忆；把已发生的往来压成一段前言
-     * 补进 prompt，否则用户会看到"它以为这是第一次聊天"。
-     */
-    /**
      * 把对话历史压成一段纯文本随提示一起交给 dsh。
      *
      * 踩过的坑：早先只取 content 非空的历史行，而长会话的尾巴几乎全是工具卡片与思考卡片
      * （这些行的 content 是空的，内容挂在 tool_name／result_summary 上），于是"最近 20 条"
      * 被整批丢掉、注入结果为空——dsh 每次新起进程都从零开始，反复重读文件、轮数暴涨。
-     * 现在按角色分别渲染（含工具调用与工具结果），并从后往前收集到一个字符预算为止。
+     * 现在按角色分别渲染（含工具调用与工具结果），并从后往前收集到预算为止。
+     *
+     * 预算是模型窗口的一个份额（见 [historyBudgetChars]），不是固定字符数。固定 6000 字符
+     * 时，长会话每轮仍然只注入最近十来条被截断的消息：上下文占用永远停在窗口的个位数百分比，
+     * 而 dsh 侧没有读取完整会话的工具，表现就是"聊了很久它还是什么都不记得"。
      */
     private fun promptWithHistory(request: AgentRuntimeWire.RunRequest, text: String): String {
-        val lines = ArrayList<String>()
-        var budget = MAX_HISTORY_TOTAL_CHARS
-        for (message in request.history.asReversed()) {
-            if (lines.size >= MAX_HISTORY_MESSAGES) break
-            val rendered = renderHistoryMessage(message) ?: continue
-            if (rendered.length > budget) break
-            budget -= rendered.length
-            lines.add(rendered)
-        }
+        val budgetChars = historyBudgetChars(request.config.contextWindow)
+        val lines = collectHistoryLines(request.history, budgetChars)
         if (lines.isEmpty()) {
             Log.i(TAG, "history injection empty: history=${request.history.size} msgs")
             return text
         }
-        lines.reverse()
-        Log.i(TAG, "prompt: history=${request.history.size} msgs, injected=${lines.size} lines")
+        Log.i(
+            TAG,
+            "prompt: history=${request.history.size} msgs, injected=${lines.size} lines, " +
+                "chars=${lines.sumOf { it.length }}, budget=$budgetChars",
+        )
         return buildString {
             append("（以下是本次对话之前的往来，仅供你了解上下文，不要重复回复它们）\n")
             append(lines.joinToString("\n"))
             append("\n（历史结束）\n\n")
             append(text)
         }
-    }
-
-    /** 单条历史消息的文本化；没有可读内容时返回 null。 */
-    private fun renderHistoryMessage(message: AgentModelClient.ConversationMessage): String? {
-        val content = message.content.trim()
-        val toolNames = toolCallNames(message)
-        val rendered = when (message.role) {
-            "user" -> content.takeIf { it.isNotEmpty() }?.let { "用户：${it.take(MAX_HISTORY_CHARS_PER_MESSAGE)}" }
-            "assistant" -> buildString {
-                if (content.isNotEmpty()) append("你：${content.take(MAX_HISTORY_CHARS_PER_MESSAGE)}")
-                if (toolNames.isNotEmpty()) {
-                    if (isNotEmpty()) append('\n')
-                    append("你调用了工具：")
-                    append(toolNames.take(MAX_HISTORY_TOOL_NAMES).joinToString("、"))
-                }
-            }.takeIf { it.isNotEmpty() }
-            "tool" -> "工具结果：${content.ifEmpty { "（无输出）" }.take(MAX_HISTORY_CHARS_PER_MESSAGE)}"
-            "system" -> content.takeIf { it.isNotEmpty() }?.let { "系统：${it.take(MAX_HISTORY_CHARS_PER_MESSAGE)}" }
-            else -> null
-        } ?: return null
-        return if (message.contextSummary) "（更早对话的摘要）$rendered" else rendered
-    }
-
-    /** 从工具调用 JSON 里取出工具名，解析失败就当作没有。 */
-    private fun toolCallNames(message: AgentModelClient.ConversationMessage): List<String> {
-        val raw = message.toolCallsJson.trim()
-        if (raw.isEmpty()) return emptyList()
-        return runCatching {
-            val array = org.json.JSONArray(raw)
-            buildList {
-                for (index in 0 until array.length()) {
-                    val call = array.optJSONObject(index) ?: continue
-                    val name = call.optJSONObject("function")?.optString("name").orEmpty()
-                        .ifBlank { call.optString("name") }
-                    if (name.isNotBlank()) add(bareToolName(name))
-                }
-            }
-        }.getOrDefault(emptyList())
     }
 
     /**
@@ -452,15 +419,100 @@ internal class DshAcpRuntime(
         private const val CONFIG_REASONING_EFFORT = "reasoning_effort"
         private const val UNKNOWN_TOOL_LABEL = "准备执行"
         private const val MAX_DISPLAY_COMMAND_CHARS = 600
-        private const val MAX_HISTORY_MESSAGES = 60
-        private const val MAX_HISTORY_CHARS_PER_MESSAGE = 600
-        private const val MAX_HISTORY_TOTAL_CHARS = 6_000
+        private const val MAX_HISTORY_MESSAGES = 240
+        private const val MAX_HISTORY_CHARS_PER_MESSAGE = 2_000
+        private const val DEFAULT_CONTEXT_WINDOW = 128_000
+        private const val HISTORY_WINDOW_PERCENT = 15L
+        private const val MIN_HISTORY_TOTAL_CHARS = 6_000
+        private const val MAX_HISTORY_TOTAL_CHARS = 150_000
         private const val MAX_HISTORY_TOOL_NAMES = 5
         private const val PROMPT_ATTEMPTS = 4
         private const val RETRY_DELAY_MS = 2_000L
         private val RETRYABLE_MARKERS = listOf("API request", "超时（", "Connection", "ECONNRESET", "socket")
         private const val DSH_ENTRY_RELATIVE = "usr/local/lib/node_modules/@deepseek-ai/dsh/lib/bin.js"
         private const val OFFICIAL_ROUTE = "deepseek-official"
+
+        /**
+         * 历史注入的字符预算：模型窗口的一个份额，而不是固定字符数。
+         *
+         * 1 字符按 1 token 保守估算（中文实际就是 1:1，英文只会更省），把窗口的 15% 留给历史，
+         * 其余留给本轮的思考、工具输出和回答——与 AgentContextBudget 的
+         * TRIGGER_RATIO(0.85) / RECENT_RATIO(0.20) 是同一套口径。上限 150k 字符是为了压住
+         * 单轮 prefill：注入的历史每轮都在滑动，前缀缓存命中不到，不能无限放大。
+         * 窗口未知时按 128K 处理，并按上下限夹住。
+         */
+        internal fun historyBudgetChars(contextWindow: Int?): Int {
+            val window = contextWindow?.takeIf { it > 0 } ?: DEFAULT_CONTEXT_WINDOW
+            return (window.toLong() * HISTORY_WINDOW_PERCENT / 100)
+                .coerceIn(MIN_HISTORY_TOTAL_CHARS.toLong(), MAX_HISTORY_TOTAL_CHARS.toLong())
+                .toInt()
+        }
+
+        /**
+         * 从最新往回收集可注入的历史行，直到用完预算，返回时恢复成从旧到新。
+         *
+         * 单条渲染超过剩余预算时停止而不是跳过：继续往前只会拿到更旧、更小的消息，
+         * 拼出来的一段会缺中间环节，比少注入更糟。
+         */
+        internal fun collectHistoryLines(
+            history: List<AgentModelClient.ConversationMessage>,
+            budgetChars: Int,
+            maxMessages: Int = MAX_HISTORY_MESSAGES,
+            maxCharsPerMessage: Int = MAX_HISTORY_CHARS_PER_MESSAGE,
+        ): List<String> {
+            val lines = ArrayList<String>()
+            var budget = budgetChars
+            for (message in history.asReversed()) {
+                if (lines.size >= maxMessages) break
+                val rendered = renderHistoryMessage(message, maxCharsPerMessage) ?: continue
+                if (rendered.length > budget) break
+                budget -= rendered.length
+                lines.add(rendered)
+            }
+            lines.reverse()
+            return lines
+        }
+
+        /** 单条历史消息的文本化；没有可读内容时返回 null。 */
+        private fun renderHistoryMessage(
+            message: AgentModelClient.ConversationMessage,
+            maxCharsPerMessage: Int,
+        ): String? {
+            val content = message.content.trim()
+            val toolNames = toolCallNames(message)
+            val rendered = when (message.role) {
+                "user" -> content.takeIf { it.isNotEmpty() }?.let { "用户：${it.take(maxCharsPerMessage)}" }
+                "assistant" -> buildString {
+                    if (content.isNotEmpty()) append("你：${content.take(maxCharsPerMessage)}")
+                    if (toolNames.isNotEmpty()) {
+                        if (isNotEmpty()) append('\n')
+                        append("你调用了工具：")
+                        append(toolNames.take(MAX_HISTORY_TOOL_NAMES).joinToString("、"))
+                    }
+                }.takeIf { it.isNotEmpty() }
+                "tool" -> "工具结果：${content.ifEmpty { "（无输出）" }.take(maxCharsPerMessage)}"
+                "system" -> content.takeIf { it.isNotEmpty() }?.let { "系统：${it.take(maxCharsPerMessage)}" }
+                else -> null
+            } ?: return null
+            return if (message.contextSummary) "（更早对话的摘要）$rendered" else rendered
+        }
+
+        /** 从工具调用 JSON 里取出工具名，解析失败就当作没有。 */
+        private fun toolCallNames(message: AgentModelClient.ConversationMessage): List<String> {
+            val raw = message.toolCallsJson.trim()
+            if (raw.isEmpty()) return emptyList()
+            return runCatching {
+                val array = org.json.JSONArray(raw)
+                buildList {
+                    for (index in 0 until array.length()) {
+                        val call = array.optJSONObject(index) ?: continue
+                        val name = call.optJSONObject("function")?.optString("name").orEmpty()
+                            .ifBlank { call.optString("name") }
+                        if (name.isNotBlank()) add(bareToolName(name))
+                    }
+                }
+            }.getOrDefault(emptyList())
+        }
 
         /**
          * Linux 环境里已经装好 dsh 时才启用 ACP 内核；否则返回 null 让上游回退到原有 Agent Loop。
