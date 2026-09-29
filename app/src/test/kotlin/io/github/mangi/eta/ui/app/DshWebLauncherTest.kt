@@ -14,11 +14,11 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class KimiWebLauncherTest {
+class DshWebLauncherTest {
     @Test fun reusesMatchingDaemonWithoutStartingAnother() = runBlocking {
         val tasks = FakeTasks(existing = true)
         val result = session(tasks).launch(ENV, "user", BACKEND)
-        assertTrue(result is KimiWebLaunchResult.Opened)
+        assertTrue(result is DshWebLaunchResult.Opened)
         assertEquals(0, tasks.starts)
         assertTrue(tasks.stops.isEmpty())
     }
@@ -26,21 +26,21 @@ class KimiWebLauncherTest {
     @Test fun browserFailureDoesNotStopReusedDaemon() = runBlocking {
         val tasks = FakeTasks(existing = true)
         val result = session(tasks, open = false).launch(ENV, "user", BACKEND)
-        assertEquals(KimiWebLaunchResult.Failed("BROWSER_UNAVAILABLE"), result)
+        assertEquals(DshWebLaunchResult.Failed("BROWSER_UNAVAILABLE"), result)
         assertTrue(tasks.stops.isEmpty())
     }
 
     @Test fun exitedNewDaemonFailsImmediatelyAndIsCleanedUp() = runBlocking {
         val tasks = FakeTasks(existing = false, running = false)
         val result = session(tasks).launch(ENV, "user", BACKEND)
-        assertEquals(KimiWebLaunchResult.Failed("KIMI_EXITED"), result)
+        assertEquals(DshWebLaunchResult.Failed("DSH_EXITED"), result)
         assertEquals(listOf("new"), tasks.stops)
     }
 
     @Test fun timeoutCleansOnlyNewDaemon() = runBlocking {
         val tasks = FakeTasks(existing = false, output = "still loading")
         val result = session(tasks).launch(ENV, "user", BACKEND)
-        assertEquals(KimiWebLaunchResult.Failed("URL_TIMEOUT"), result)
+        assertEquals(DshWebLaunchResult.Failed("URL_TIMEOUT"), result)
         assertEquals(listOf("new"), tasks.stops)
     }
 
@@ -49,16 +49,21 @@ class KimiWebLauncherTest {
             val tasks = FakeTasks(existing = existing, output = "loading")
             val read = CompletableDeferred<Unit>()
             tasks.onLogs = { read.complete(Unit) }
-            val job = launch { KimiWebSession(tasks, { true }, waitIntervalMs = 60_000).launch(ENV, "user", BACKEND) }
+            val job = launch { DshWebSession(tasks, { true }, waitIntervalMs = 60_000).launch(ENV, "user", BACKEND) }
             read.await()
             job.cancelAndJoin()
             assertEquals(if (existing) emptyList<String>() else listOf("new"), tasks.stops)
         }
     }
 
-    private fun session(tasks: FakeTasks, open: Boolean = true) = KimiWebSession(tasks, { open }, waitAttempts = 1, waitIntervalMs = 0)
+    private fun session(tasks: FakeTasks, open: Boolean = true) =
+        DshWebSession(tasks, { open }, waitAttempts = 1, waitIntervalMs = 0)
 
-    private class FakeTasks(existing: Boolean, private val running: Boolean = true, private val output: String = "http://127.0.0.1:5494/#token=abc_123") : KimiWebSession.Tasks {
+    private class FakeTasks(
+        existing: Boolean,
+        private val running: Boolean = true,
+        private val output: String = "http://127.0.0.1:5494/?token=abc_123",
+    ) : DshWebSession.Tasks {
         private var task: DetachedTask? = if (existing) task("old") else null
         var starts = 0
         val stops = mutableListOf<String>()
@@ -71,7 +76,8 @@ class KimiWebLauncherTest {
         override fun logs(id: String): DaemonLogsResult { onLogs(); return DaemonLogsResult(ok = true, text = output) }
         override fun stop(id: String) { stops += id }
         companion object {
-            private fun task(id: String) = DetachedTask(id, 10, "owner", KimiWebSession.COMMAND, "/workspace", "user", ENV, "/log", 0, BACKEND)
+            private fun task(id: String) =
+                DetachedTask(id, 10, "owner", DshWebSession.COMMAND, "/workspace", "user", ENV, "/log", 0, BACKEND)
         }
     }
 

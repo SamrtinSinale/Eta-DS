@@ -12,23 +12,23 @@ import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
-class KimiWebUiStateTest {
+class DshWebUiStateTest {
     @Test
     fun preparationAndRunningBothOfferStopButIdleAndFailuresDoNot() {
-        assertTrue(KimiWebUiState(KimiWebPhase.STARTING).canStop)
-        assertTrue(KimiWebUiState(KimiWebPhase.RUNNING).canStop)
-        assertFalse(KimiWebUiState(KimiWebPhase.NOT_INSTALLED).canStop)
-        assertFalse(KimiWebUiState(KimiWebPhase.FAILED).canStop)
+        assertTrue(DshWebUiState(DshWebPhase.STARTING).canStop)
+        assertTrue(DshWebUiState(DshWebPhase.RUNNING).canStop)
+        assertFalse(DshWebUiState(DshWebPhase.NOT_INSTALLED).canStop)
+        assertFalse(DshWebUiState(DshWebPhase.FAILED).canStop)
     }
 
     @Test
     fun permissionAndProcessFailuresHaveTheirOwnRecoveryMessage() {
         val context = RuntimeEnvironment.getApplication()
-        assertEquals(context.getString(R.string.capability_kimi_root_required),
-            KimiWebLaunchResult.Failed("ROOT_REQUIRED").message(context))
+        assertEquals(context.getString(R.string.capability_dsh_root_required),
+            DshWebLaunchResult.Failed("ROOT_REQUIRED").message(context))
         assertEquals(context.getString(R.string.capability_background_failed),
-            KimiWebLaunchResult.Failed("BACKGROUND_START_NOT_ALLOWED").message(context))
-        assertEquals(context.getString(R.string.capability_kimi_exited),
-            KimiWebLaunchResult.Failed("KIMI_EXITED").message(context))
+            DshWebLaunchResult.Failed("BACKGROUND_START_NOT_ALLOWED").message(context))
+        assertEquals(context.getString(R.string.capability_dsh_exited),
+            DshWebLaunchResult.Failed("DSH_EXITED").message(context))
     }
 }
