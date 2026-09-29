@@ -180,7 +180,7 @@ These implementation notes are currently in Chinese:
 
 ## Upstream and license
 
-This repository is a fork of [Mangi-11/Eta](https://github.com/Mangi-11/Eta). Changes are limited to the app name (Heta), the `applicationId` (`io.sartin.heta`), and some user-facing strings; the implementation comes from upstream.
+This repository is a fork of [Mangi-11/Eta](https://github.com/Mangi-11/Eta). Changes are limited to the app name (Heta), the icon assets, and some user-facing strings; the `applicationId` stays upstream's `io.sartin.eats`, and the implementation comes from upstream.
 
 The code stays under the upstream [PolyForm Noncommercial License 1.0.0](LICENSE). Copyright belongs to the original author, [蛮吉 (Mangi-11)](https://github.com/Mangi-11), and the Required Notice at the end of `LICENSE` is kept unchanged. Noncommercial use, modification, and distribution are permitted; sales, paid installation, and other commercial use require prior written permission from the original author.
 

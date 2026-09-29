@@ -188,7 +188,7 @@ Heta 先从现有 Android 上的模型、上下文与工具做起。真正落地
 
 ## 上游与许可证
 
-本仓库是 [Mangi-11/Eta](https://github.com/Mangi-11/Eta) 的 fork，改动限于应用名称（Heta）、`applicationId`（`io.sartin.heta`）与部分界面文案，功能实现来自上游。
+本仓库是 [Mangi-11/Eta](https://github.com/Mangi-11/Eta) 的 fork，改动限于应用名称（Heta）、图标资源与部分界面文案；`applicationId` 沿用上游的 `io.sartin.eats`，功能实现来自上游。
 
 代码沿用上游的 [PolyForm Noncommercial License 1.0.0](LICENSE)，版权归原作者[蛮吉（Mangi-11）](https://github.com/Mangi-11)所有，`LICENSE` 末尾的 Required Notice 原样保留。按该许可证，非商业用途可使用、修改和分发；贩卖、收费代装及其他商业使用需先取得原作者书面授权。
 

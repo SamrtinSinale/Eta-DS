@@ -63,7 +63,7 @@ class EntrySurfaceGuardTest {
         )
 
         assertNotNull(guard)
-        // 排除的必须是自己这个包；applicationId 已经改成 io.sartin.heta，别再写死旧包名。
+        // 排除的必须是自己这个包；别写死包名，applicationId 改了这里也要跟着对。
         assertEquals(BuildConfig.APPLICATION_ID, guard?.targetPackageName)
         assertTrue(guard?.dismissOnce() == true)
         assertTrue(guard?.dismissOnce() == true)
