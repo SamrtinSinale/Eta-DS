@@ -158,12 +158,15 @@ jobs:
         id: apk
         env:
           VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          VERSION_CODE: ${{ steps.version.outputs.version_code }}
         run: |
           set -euo pipefail
           release_apk="app/build/outputs/apk/release/app-release.apk"
           output_dir="$RUNNER_TEMP/apks"
           apksigner_path="$(find "$ANDROID_HOME/build-tools" \
             -type f -name apksigner | sort -V | tail -n 1)"
+          aapt2_path="$(find "$ANDROID_HOME/build-tools" \
+            -type f -name aapt2 | sort -V | tail -n 1)"
 
           if [[ ! -f "$release_apk" ]]; then
             echo "::error::未找到 Release APK。"
@@ -173,8 +176,23 @@ jobs:
             echo "::error::未找到 apksigner。"
             exit 1
           fi
+          if [[ -z "$aapt2_path" ]]; then
+            echo "::error::未找到 aapt2。"
+            exit 1
+          fi
 
           "$apksigner_path" verify --print-certs "$release_apk"
+
+          # 校验 APK 里真实的版本号与本次构建请求一致
+          badging="$("$aapt2_path" dump badging "$release_apk" | head -n 1)"
+          apk_version_name="$(sed -n "s/.*[[:space:]]versionName='\([^']*\)'.*/\1/p" <<<"$badging")"
+          apk_version_code="$(sed -n "s/.*[[:space:]]versionCode='\([^']*\)'.*/\1/p" <<<"$badging")"
+          if [[ "$apk_version_name" != "$VERSION_NAME" || "$apk_version_code" != "$VERSION_CODE" ]]; then
+            echo "::error::APK 版本与预期不一致：APK=$apk_version_name($apk_version_code) 预期=$VERSION_NAME($VERSION_CODE)"
+            exit 1
+          fi
+          echo "APK 版本校验通过：$apk_version_name ($apk_version_code)"
+
           mkdir -p "$output_dir"
           cp "$release_apk" "$output_dir/eta-${VERSION_NAME}-release.apk"
           echo "release_path=$output_dir/eta-${VERSION_NAME}-release.apk" >> "$GITHUB_OUTPUT"
