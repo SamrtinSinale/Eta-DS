@@ -1,6 +1,6 @@
 # Agent Runtime
 
-Eta 的 Agent Runtime 负责把一次用户输入组织为模型回合、工具执行和可持久化的增量 transcript。它运行在模块自身进程；Hook 进程只负责识别入口、发送请求和接收结果。
+Eda 的 Agent Runtime 负责把一次用户输入组织为模型回合、工具执行和可持久化的增量 transcript。它运行在模块自身进程；Hook 进程只负责识别入口、发送请求和接收结果。
 
 ## 代码边界
 
@@ -64,21 +64,21 @@ pending steering
 
 ## Provider 协议
 
-Provider 默认基础提示词将 Eta 定义为运行在 Android 设备上的 AI 助手，可以回答问题、与用户交流，也可以通过工具了解设备情况并执行操作；回答使用用户的语言，简洁、直接、自然。默认正文以 `BuiltinProviders.DEFAULT_SYSTEM_PROMPT` 为准；Provider 提示词为空时使用该默认值，已有非空配置保持原值。
+Provider 默认基础提示词将 Eda 定义为运行在 Android 设备上的 AI 助手，可以回答问题、与用户交流，也可以通过工具了解设备情况并执行操作；回答使用用户的语言，简洁、直接、自然。默认正文以 `BuiltinProviders.DEFAULT_SYSTEM_PROMPT` 为准；Provider 提示词为空时使用该默认值，已有非空配置保持原值。
 
-Runtime 独立于 Provider 自定义提示词注入 Eta 身份，以“当前配置的模型”标注 `ModelConfig.model` 的实际值，随本次运行配置更新，不使用模型显示名或历史消息推断当前模型，也不据此推断部署版本、知识截止日期或能力。通用交流规则要求日常问答直接回答、仅在缺少关键参数时澄清、按用户需求调整详略，并如实交代工具操作结果；个性化分析区分事实与推测，不根据零散记录断言性格、动机或心理状态。工具、记忆与 Skills 等系统规则仍按运行时条件追加。
+Runtime 独立于 Provider 自定义提示词注入 Eda 身份，以“当前配置的模型”标注 `ModelConfig.model` 的实际值，随本次运行配置更新，不使用模型显示名或历史消息推断当前模型，也不据此推断部署版本、知识截止日期或能力。通用交流规则要求日常问答直接回答、仅在缺少关键参数时澄清、按用户需求调整详略，并如实交代工具操作结果；个性化分析区分事实与推测，不根据零散记录断言性格、动机或心理状态。工具、记忆与 Skills 等系统规则仍按运行时条件追加。
 
 OpenAI-compatible Provider 可在配置页选择 `Chat Completions` 或 `Responses API`。新安装和重置后的内置 OpenAI 默认使用 Responses；数据库中已有 Provider 不会被默认值覆盖。自定义 Provider 和其他内置 Provider 默认仍使用 Chat Completions。
 
-提供商目录从固定的 `models.dev/api.json` 读取公开元数据，应用内另有随 APK 打包的压缩快照；在线目录通过大小限制、协议和 HTTPS 地址校验后原子缓存，读取失败时使用缓存或快照。目录只列出 Eta 可按 Chat Completions 接入且具有文本输出与工具调用能力的候选模型；读取目录不发送已保存的 API Key。用户选择模型并核对完整 Base URL 后，导入为默认停用、无 API Key 的自定义提供商；后续密钥由用户为该地址填写，已保存的模型和当前选择不随目录刷新改写。
+提供商目录从固定的 `models.dev/api.json` 读取公开元数据，应用内另有随 APK 打包的压缩快照；在线目录通过大小限制、协议和 HTTPS 地址校验后原子缓存，读取失败时使用缓存或快照。目录只列出 Eda 可按 Chat Completions 接入且具有文本输出与工具调用能力的候选模型；读取目录不发送已保存的 API Key。用户选择模型并核对完整 Base URL 后，导入为默认停用、无 API Key 的自定义提供商；后续密钥由用户为该地址填写，已保存的模型和当前选择不随目录刷新改写。
 
 Chat Completions 在协议边界把当前上下文中的全部 `system` 内容按原顺序合并为首条唯一系统消息，兼容要求系统消息只能位于开头的模型 Chat Template。Responses 则把完整的 `system`/`developer` 上下文投影到 `instructions`，并将持久历史重建为带 `type: "message"` 的 input Items。
 
-Responses 请求固定使用 `stream:true`、`store:false`，不发送 `previous_response_id`。Runtime 在同一次 run 的工具回合之间精确回放 Provider 返回的完整 output Items；因此 encrypted reasoning、服务端工具状态等 opaque 数据只存在于内存，不进入 IPC transcript、Room、日志或运行归档。持久会话只保留规范化回答、可见推理内容和 Eta 工具记录，后续 run 由这些稳定数据重新构建上下文。
+Responses 请求固定使用 `stream:true`、`store:false`，不发送 `previous_response_id`。Runtime 在同一次 run 的工具回合之间精确回放 Provider 返回的完整 output Items；因此 encrypted reasoning、服务端工具状态等 opaque 数据只存在于内存，不进入 IPC transcript、Room、日志或运行归档。持久会话只保留规范化回答、可见推理内容和 Eda 工具记录，后续 run 由这些稳定数据重新构建上下文。
 
 兼容接口若在 `response.completed` 中省略 `output` 或返回空数组，Runtime 只使用同一 SSE 流中已经收到的标准文本、推理摘要和函数调用增量完成当前轮次；非空终态始终是权威结果，且本地恢复结果不会冒充 Provider 的 opaque output Items。
 
-推理界面展示 Provider 返回的可见推理内容，不由 Eta 生成或补写。Responses 支持 `reasoning_summary_text.delta` 和 `reasoning_text.delta`；终态读取 reasoning item 的 `summary[]` 与 `content[].reasoning_text`，并兼容旧接口的单字段 `reasoning_text`。标准内容与旧字段同时存在时不重复追加，终态仍按 item 和内容块身份校准流式结果。Responses 只对精确命中官方目录且未被远端显式标记为 `reasoning:false` 的模型补齐推理能力，不会因 Endpoint 类型而假定所有模型支持推理。
+推理界面展示 Provider 返回的可见推理内容，不由 Eda 生成或补写。Responses 支持 `reasoning_summary_text.delta` 和 `reasoning_text.delta`；终态读取 reasoning item 的 `summary[]` 与 `content[].reasoning_text`，并兼容旧接口的单字段 `reasoning_text`。标准内容与旧字段同时存在时不重复追加，终态仍按 item 和内容块身份校准流式结果。Responses 只对精确命中官方目录且未被远端显式标记为 `reasoning:false` 的模型补齐推理能力，不会因 Endpoint 类型而假定所有模型支持推理。
 
 Chat Completions 消费 `reasoning_content`，并兼容 `reasoning` 和 `reasoning_details` 中的可见文本或摘要；同一分片同时包含多种表示时只显示一次。Anthropic 消费 `content_block_start` 中已有的文字及后续 `thinking_delta` / `text_delta`，思考签名和加密内容不作为文字展示。三种协议共用 SSE 分帧，支持多行 `data:`、注释心跳和 UTF-8；正文、思考、工具的解释仍由各自 Provider 负责。Chat 在 `finish_reason` 到达时结束可见块，再接收用量与 `[DONE]`；Responses 和 Anthropic 收到各自终态事件后立即收尾，不等待连接关闭。缺少合法终态或 Anthropic 可见/工具块未闭合时返回未完成错误。
 
@@ -86,7 +86,7 @@ Anthropic 工具回合会在当前 run 的模型上下文中按原顺序回传�
 
 Chat Completions、Responses 与 Anthropic Messages 在 Provider 边界统一投影为带 `round + block index` 身份的正文、思考和工具块。Responses 额外使用 `item_id/output_index/content_index` 区分同一轮中的多个 output item；Chat Completions 在 delta 类型切换时创建新块；Anthropic 直接保留 `content_block.index`。正文、思考或工具类型一旦切换，上一段可见块立即定稿，后续同类型内容也不会跨过工具卡片回填到旧块。终态只在 Provider 的权威内容与已流式内容不一致时携带一次替换，不用整轮聚合正文覆盖最后一个块。
 
-服务端网页搜索是 Responses Provider 的独立开关，默认关闭。开启后请求只增加 `web_search` 托管工具；搜索开始和结束作为独立运行事件投影到 UI，不进入 Eta 本地工具执行器。最终回答中的 `url_citation` 会去重并转换为可点击 Markdown 引用；偏移无效时降级为回答末尾的来源列表。当前不接入 file search、code interpreter、Provider 托管 MCP 或其他托管工具。
+服务端网页搜索是 Responses Provider 的独立开关，默认关闭。开启后请求只增加 `web_search` 托管工具；搜索开始和结束作为独立运行事件投影到 UI，不进入 Eda 本地工具执行器。最终回答中的 `url_citation` 会去重并转换为可点击 Markdown 引用；偏移无效时降级为回答末尾的来源列表。当前不接入 file search、code interpreter、Provider 托管 MCP 或其他托管工具。
 
 ### 模型等待与重试
 
@@ -98,9 +98,9 @@ Chat Completions、Responses 与 Anthropic Messages 在 Provider 边界统一投
 
 ## MCP 工具
 
-Eta 直接作为 MCP 客户端连接远程 Streamable HTTP 服务器，不把协议能力绑定到某个模型 Provider。当前优先使用 `2026-07-28` 无状态协议，并兼容需要 `initialize` 与 session 的 `2025-11-25` 服务；只接入 `tools/list` 和 `tools/call`，暂不支持 Resources、Prompts、Tasks、stdio、OAuth、交互式补充输入或 Provider 托管 MCP。
+Eda 直接作为 MCP 客户端连接远程 Streamable HTTP 服务器，不把协议能力绑定到某个模型 Provider。当前优先使用 `2026-07-28` 无状态协议，并兼容需要 `initialize` 与 session 的 `2025-11-25` 服务；只接入 `tools/list` 和 `tools/call`，暂不支持 Resources、Prompts、Tasks、stdio、OAuth、交互式补充输入或 Provider 托管 MCP。
 
-工具默认关闭，服务器也可整体停用。添加服务器时先发现并缓存工具目录，用户再逐项启用；未标记只读的工具需要额外确认。现代服务的目录按 `ttlMs` 到期并在下次 run 前刷新，legacy 目录由用户手动刷新。每次 run 开始时一并冻结启用目录与 Bearer Token，并生成带服务器命名空间的模型工具名，因此后续设置变化不会改变正在执行的 schema 或账户。Eta 不因 `$ref`、组合关键字、条件关键字等复杂 Schema 禁用工具，而是原样投影给模型并在调用前按同一份 Schema 校验；现代 Streamable HTTP 的 `x-mcp-header` 参数会同步映射为请求头。
+工具默认关闭，服务器也可整体停用。添加服务器时先发现并缓存工具目录，用户再逐项启用；未标记只读的工具需要额外确认。现代服务的目录按 `ttlMs` 到期并在下次 run 前刷新，legacy 目录由用户手动刷新。每次 run 开始时一并冻结启用目录与 Bearer Token，并生成带服务器命名空间的模型工具名，因此后续设置变化不会改变正在执行的 schema 或账户。Eda 不因 `$ref`、组合关键字、条件关键字等复杂 Schema 禁用工具，而是原样投影给模型并在调用前按同一份 Schema 校验；现代 Streamable HTTP 的 `x-mcp-header` 参数会同步映射为请求头。
 
 MCP 地址由用户直接配置，HTTP、HTTPS、局域网与本机地址使用同一条连接链路，并沿用共享 OkHttp 客户端的默认重定向和超时行为；HTTP 会明文传输 Token、工具参数和结果。Bearer Token 通过 Android Keystore 加密后保存在本机。MCP 原始参数与结果只在当前回合使用，持久 transcript、运行 checkpoint 和归档只保留脱敏记录；文本、结构化结果、图片、分页次数和单次 run 工具数仍有独立预算，不支持或超出预算的结果会携带明确标记。取消 run 会立即封闭新调用并关闭在途 HTTP 请求，legacy session 的释放只做异步 best-effort，不阻塞取消线程。
 
@@ -116,7 +116,7 @@ MCP 地址由用户直接配置，HTTP、HTTPS、局域网与本机地址使用�
 
 ## 本地工具能力合同
 
-`AgentToolRequirements` 为每个本地工具声明 `NONE / PARTIAL / REQUIRED` Root 要求与无障碍、普通系统授权、ROM 条件；工具未登记元数据时不能进入模型目录。`AgentToolCapabilities` 每轮捕获设备条件，同一份投影后的 Schema 同时用于 Provider 声明与参数校验。元数据属于 Eta 内部，不扩展 Provider 协议。UI 聚合卡关联真实工具 ID，“全部能力”只改变展示。
+`AgentToolRequirements` 为每个本地工具声明 `NONE / PARTIAL / REQUIRED` Root 要求与无障碍、普通系统授权、ROM 条件；工具未登记元数据时不能进入模型目录。`AgentToolCapabilities` 每轮捕获设备条件，同一份投影后的 Schema 同时用于 Provider 声明与参数校验。元数据属于 Eda 内部，不扩展 Provider 协议。UI 聚合卡关联真实工具 ID，“全部能力”只改变展示。
 
 没有 Root 时，专属工具彻底移除；混合终端仅公开 `identity=user`，设备默认路径与模型提示同步调整。执行器再次核查当前 Root 与参数，旧调用返回 `ROOT_REQUIRED`。普通前台 Intent 不要求无障碍；截图、节点、手势、输入和条件等待需要真实服务连接，已开启系统保护时保留有限修复链路。当前通知来自已连接的通知监听服务，断连返回明确错误，不以历史记录替代。用户选择保存在原有本地 Agent 配置与 RemotePreferences 协调链路中，能力变化不改写保存的开关。
 
@@ -176,7 +176,7 @@ App 会话提供 `conversation_history` 工具，搜索或分页读取当前会�
 
 明确的上下文溢出最多进行三次有进展的恢复；已开始托管工具的请求不自动重放。失败或取消不提交半成品摘要，已经提交的安全快照随取消或失败结果保留。任务已完成时，压缩失败不改变任务成功状态，原始上下文完整保存；实际持久化失败仍报告失败，不用删头方式掩盖。用户停止时先取消网络与工具，收束运行并保存已完成的安全历史，再交付取消终态。
 
-设计依据：[Android Binder 事务限制](https://developer.android.com/reference/android/os/TransactionTooLargeException)、[ParcelFileDescriptor](https://developer.android.com/reference/android/os/ParcelFileDescriptor)、[CursorWindow](https://developer.android.com/reference/android/database/CursorWindow)。参考的会话模式见 [pi 的追加式压缩记录与上下文重建](https://github.com/earendil-works/pi/blob/b215884021491772a1eb7a9f92c6653a2a52a69d/packages/coding-agent/docs/compaction.md) 和 [Kimi Code 的历史恢复指针](https://github.com/MoonshotAI/kimi-code/blob/b1807253c34e12b0ecf60c9b4da3890d0c80ce72/packages/agent-core-v2/src/agent/fullCompaction/contextRecovery.ts)。Eta 使用 Room 分块及当前会话读取工具适配 Android，不依赖桌面文件路径。
+设计依据：[Android Binder 事务限制](https://developer.android.com/reference/android/os/TransactionTooLargeException)、[ParcelFileDescriptor](https://developer.android.com/reference/android/os/ParcelFileDescriptor)、[CursorWindow](https://developer.android.com/reference/android/database/CursorWindow)。参考的会话模式见 [pi 的追加式压缩记录与上下文重建](https://github.com/earendil-works/pi/blob/b215884021491772a1eb7a9f92c6653a2a52a69d/packages/coding-agent/docs/compaction.md) 和 [Kimi Code 的历史恢复指针](https://github.com/MoonshotAI/kimi-code/blob/b1807253c34e12b0ecf60c9b4da3890d0c80ce72/packages/agent-core-v2/src/agent/fullCompaction/contextRecovery.ts)。Eda 使用 Room 分块及当前会话读取工具适配 Android，不依赖桌面文件路径。
 
 ## Skills 安装边界
 
