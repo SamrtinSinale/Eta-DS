@@ -1,5 +1,6 @@
 package io.github.mangi.eta
 
+import io.github.mangi.eta.agent.voice.SpeechOssUpload
 import android.app.Application
 import android.os.Handler
 import android.os.Looper
@@ -59,6 +60,14 @@ class EtaApp : Application(), XposedServiceHelper.OnServiceListener {
         ProviderRepository.init(this)
         McpServerRepository.init(this)
         XposedServiceHelper.registerListener(this)
+        applicationScope.launch {
+            try {
+                SpeechOssUpload(this@EtaApp).retryPending(this@EtaApp)
+            } catch (error: Exception) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                AndroidAgentLogger.warn("Eta speech cleanup unavailable: type=${error.javaClass.simpleName}")
+            }
+        }
         applicationScope.launch {
             LinuxEnvironmentSettingsRepository.initialize(this@EtaApp)
             runCatching {

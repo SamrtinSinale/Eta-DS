@@ -42,6 +42,8 @@ internal fun speechIssueMessage(issue: EtaSpeechIssue): Int = when (issue.kind) 
 internal data class EtaSpeechState(
     val phase: EtaSpeechPhase = EtaSpeechPhase.IDLE,
     val errorRes: Int? = null,
+    val message: String? = null,
+    val configureAvailable: Boolean = false,
     val downloadAvailable: Boolean = false,
     val feedbackIsError: Boolean = true,
 ) {
@@ -49,15 +51,15 @@ internal data class EtaSpeechState(
 }
 
 @Composable
-internal fun EtaSpeechFeedback(speech: EtaSpeechState, onDownloadModel: () -> Unit) {
-    val errorRes = speech.errorRes ?: return
+internal fun EtaSpeechFeedback(speech: EtaSpeechState, onDownloadModel: () -> Unit, onOpenSpeechSettings: () -> Unit) {
+    val message = speech.message ?: speech.errorRes?.let { stringResource(it) } ?: return
     val dark = MiuixTheme.colorScheme.background.luminance() < 0.5f
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = stringResource(errorRes),
+            text = message,
             color = if (speech.feedbackIsError) {
                 if (dark) Color(0xFFFF9E99) else Color(0xFFB42318)
             } else {
@@ -71,6 +73,12 @@ internal fun EtaSpeechFeedback(speech: EtaSpeechState, onDownloadModel: () -> Un
                 )
                 .padding(horizontal = 10.dp, vertical = 6.dp),
         )
+        if (speech.configureAvailable) {
+            TextButton(
+                text = stringResource(R.string.speech_open_settings),
+                onClick = onOpenSpeechSettings,
+            )
+        }
         if (speech.downloadAvailable) {
             TextButton(
                 text = stringResource(R.string.voice_download_model),

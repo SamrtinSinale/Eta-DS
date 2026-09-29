@@ -233,4 +233,4 @@ private fun BackupIcon(icon: ImageVector, loading: Boolean) {
 }
 
 private fun defaultBackupFileName(): String =
-    "Eta-backup-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())}.eta-backup.json"
+    "Eda-backup-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())}.eta-backup.json"

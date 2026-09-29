@@ -1,5 +1,9 @@
 package io.github.mangi.eta.ui.app
 
+import io.github.mangi.eta.ui.voice.SpeechOssScreen
+import io.github.mangi.eta.ui.voice.SpeechRecognitionScreen
+import io.github.mangi.eta.ui.voice.SpeechSettingsScreen
+import io.github.mangi.eta.ui.voice.SpeechSynthesisScreen
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
@@ -57,6 +61,8 @@ import io.github.mangi.eta.ui.model.ConversationSummaryUi
 import io.github.mangi.eta.ui.model.PermissionHealthAction
 import io.github.mangi.eta.ui.navigation.AgentNavigator
 import io.github.mangi.eta.ui.navigation.AppRoute
+import io.github.mangi.eta.ui.pages.providers.CommunityCatalogProviderScreen
+import io.github.mangi.eta.ui.pages.providers.CommunityCatalogScreen
 import io.github.mangi.eta.ui.pages.providers.ModelProviderDetailScreen
 import io.github.mangi.eta.ui.pages.providers.ModelProviderListScreen
 import io.github.mangi.eta.ui.screens.backup.DataBackupScreen
@@ -98,16 +104,25 @@ import top.yukonga.miuix.kmp.window.WindowDialog
 @Composable
 fun AgentAppRoot(
     assistantConversationKey: String? = null,
+    openSpeechSettings: Boolean = false,
+    onSpeechSettingsOpened: () -> Unit = {},
     onAssistantConversationOpened: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
     val uiScope = rememberCoroutineScope()
     val backStack = rememberNavBackStack<AppRoute>(AppRoute.Home)
+    LaunchedEffect(openSpeechSettings) {
+        if (openSpeechSettings) {
+            if (backStack.lastOrNull() != AppRoute.SpeechSettings) backStack.add(AppRoute.SpeechSettings)
+            onSpeechSettingsOpened()
+        }
+    }
     val navigator = remember(backStack) { AgentNavigator(backStack) }
     var navigationResetKey by rememberSaveable { mutableIntStateOf(0) }
     val appViewModel = viewModel<AgentAppViewModel>()
     val agentState = appViewModel.state
     val characterStore = viewModel<CharacterLibraryViewModel>().store
+    val communityCatalogStore = viewModel<CommunityCatalogViewModel>().store
     val requestExecutionNotifications = rememberExecutionNotificationRequest()
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -603,6 +618,24 @@ fun AgentAppRoot(
                     onBack = ::popRoute
                 )
             }
+            entry<AppRoute.SpeechSettings>(swipeDismiss = swipeDismiss) {
+                SpeechSettingsScreen(
+                    onBack = ::popRoute,
+                    onNavigate = { route -> pushRoute(route) },
+                )
+            }
+            entry<AppRoute.SpeechRecognition>(swipeDismiss = swipeDismiss) {
+                SpeechRecognitionScreen(
+                    onBack = ::popRoute,
+                    onOpenOss = { pushRoute(AppRoute.SpeechOss) },
+                )
+            }
+            entry<AppRoute.SpeechSynthesis>(swipeDismiss = swipeDismiss) {
+                SpeechSynthesisScreen(onBack = ::popRoute)
+            }
+            entry<AppRoute.SpeechOss>(swipeDismiss = swipeDismiss) {
+                SpeechOssScreen(onBack = ::popRoute)
+            }
             entry<AppRoute.AppearanceSettings>(swipeDismiss = swipeDismiss) {
                 AppearanceSettingsScreen(onBack = ::popRoute)
             }
@@ -656,6 +689,21 @@ fun AgentAppRoot(
                 ModelProviderListScreen(
                     onNavigate = { route -> pushRoute(route) },
                     onBack = ::popRoute
+                )
+            }
+            entry<AppRoute.CommunityCatalog>(swipeDismiss = swipeDismiss) {
+                CommunityCatalogScreen(
+                    store = communityCatalogStore,
+                    onNavigate = { route -> pushRoute(route) },
+                    onBack = ::popRoute,
+                )
+            }
+            entry<AppRoute.CommunityCatalogProvider>(swipeDismiss = swipeDismiss) { route ->
+                CommunityCatalogProviderScreen(
+                    catalogId = route.catalogId,
+                    store = communityCatalogStore,
+                    onImported = { providerId -> navigator.replace(AppRoute.ModelProviderDetail(providerId)) },
+                    onBack = ::popRoute,
                 )
             }
             entry<AppRoute.McpServers>(swipeDismiss = swipeDismiss) {

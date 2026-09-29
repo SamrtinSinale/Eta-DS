@@ -56,6 +56,12 @@ internal class AgentContextSession(
 
     fun compact(roundTools: JSONArray, force: Boolean = false, final: Boolean = false) {
         val before = budget.estimate(messages, roundTools)
+        if (AnthropicEphemeralState.hasPendingToolResponse(messages)) {
+            if (force || budget.exceedsWindow(before)) {
+                throw AgentContextCompactor.signedAnthropicToolRoundFailure()
+            }
+            return
+        }
         if (!force && !budget.shouldCompact(before)) {
             try {
                 publishSnapshot()

@@ -33,8 +33,8 @@ internal object ProviderReasoning {
             ProviderSourceTypes.MIMO -> applyToggleOnlyProvider(request, "MiMo", effort)
             ProviderSourceTypes.MINIMAX -> unsupportedEffort("MiniMax", effort)
             ProviderSourceTypes.OPENROUTER -> applyOpenRouter(request, effort)
-            ProviderSourceTypes.STEPFUN -> applyStepFun(request, effort)
-            ProviderSourceTypes.OPENAI -> applyOpenAi(request, effort)
+            ProviderSourceTypes.STEPFUN -> applyStepFun(request, config, effort)
+            ProviderSourceTypes.OPENAI -> applyOpenAi(request, config, effort)
             ProviderSourceTypes.CUSTOM -> applyNamedReasoningEffort(request, effort)
         }
     }
@@ -45,8 +45,8 @@ internal object ProviderReasoning {
     ) {
         if (config.reasoningCapabilities == null) return
         val effort = validatedEffort(config)
-        if (sourceType(config) == ProviderSourceTypes.OPENAI && effort == ReasoningEffort.MAX) {
-            unsupportedEffort("OpenAI", effort)
+        if (sourceType(config) == ProviderSourceTypes.OPENAI) {
+            validateOpenAiEffort(config.model, effort)
         }
         request.put(
             "reasoning",
@@ -120,7 +120,10 @@ internal object ProviderReasoning {
         val model = config.model.trim().lowercase()
         when {
             model.startsWith("qwen3.7-") -> applyQwenBudget(request, config, effort)
-            model.startsWith("qwen3.8-") -> applyNamedReasoningEffort(request, effort)
+            model.startsWith("qwen3.8-") -> {
+                request.remove("thinking_budget")
+                applyNamedReasoningEffort(request, effort)
+            }
             "deepseek" in model || model.startsWith("kimi-k3") ->
                 applyNamedReasoningEffort(request, effort)
             model.startsWith("kimi-k2.6") || model.startsWith("kimi-k2.5") ->
@@ -199,7 +202,7 @@ internal object ProviderReasoning {
         if (effort != ReasoningEffort.OFF) {
             val providerEffort = when (effort) {
                 ReasoningEffort.MINIMAL -> unsupportedEffort("DeepSeek", effort)
-                ReasoningEffort.LOW,
+                ReasoningEffort.LOW -> ReasoningEffort.LOW
                 ReasoningEffort.MEDIUM,
                 ReasoningEffort.HIGH -> ReasoningEffort.HIGH
                 ReasoningEffort.XHIGH,
@@ -248,8 +251,18 @@ internal object ProviderReasoning {
         applyThinkingToggle(request, effort, keepAll)
     }
 
-    private fun applyStepFun(request: JSONObject, effort: ReasoningEffort) {
-        require(effort == ReasoningEffort.LOW || effort == ReasoningEffort.HIGH) {
+    private fun applyStepFun(
+        request: JSONObject,
+        config: AgentModelClient.ModelConfig,
+        effort: ReasoningEffort,
+    ) {
+        val model = config.model.trim().lowercase()
+        val supported = if (model == "step-5-preview" || model == "step-3.7-flash") {
+            setOf(ReasoningEffort.LOW, ReasoningEffort.MEDIUM, ReasoningEffort.HIGH)
+        } else {
+            setOf(ReasoningEffort.LOW, ReasoningEffort.HIGH)
+        }
+        require(effort in supported) {
             "StepFun 不支持 ${effort.displayName} thinking effort"
         }
         applyNamedReasoningEffort(request, effort)
@@ -272,9 +285,32 @@ internal object ProviderReasoning {
         request.put("reasoning", reasoning)
     }
 
-    private fun applyOpenAi(request: JSONObject, effort: ReasoningEffort) {
-        if (effort == ReasoningEffort.MAX) unsupportedEffort("OpenAI", effort)
+    private fun applyOpenAi(
+        request: JSONObject,
+        config: AgentModelClient.ModelConfig,
+        effort: ReasoningEffort,
+    ) {
+        validateOpenAiEffort(config.model, effort)
         applyNamedReasoningEffort(request, effort)
+    }
+
+    private fun validateOpenAiEffort(modelId: String, effort: ReasoningEffort) {
+        when (modelId.trim().lowercase()) {
+            "gpt-6-astra" -> require(effort !in setOf(ReasoningEffort.OFF, ReasoningEffort.MINIMAL)) {
+                "GPT-6 Astra 不支持 ${effort.displayName} thinking effort"
+            }
+            "gpt-6-sol", "gpt-6-luna" -> require(effort != ReasoningEffort.MINIMAL) {
+                "GPT-6 不支持 ${effort.displayName} thinking effort"
+            }
+            "gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna" ->
+                require(effort != ReasoningEffort.MINIMAL) {
+                    "GPT-5.6 不支持 ${effort.displayName} thinking effort"
+                }
+            "gpt-5.5" -> require(effort !in setOf(ReasoningEffort.MINIMAL, ReasoningEffort.MAX)) {
+                "GPT-5.5 不支持 ${effort.displayName} thinking effort"
+            }
+            else -> if (effort == ReasoningEffort.MAX) unsupportedEffort("OpenAI", effort)
+        }
     }
 
     private fun applyNamedReasoningEffort(request: JSONObject, effort: ReasoningEffort) {
@@ -307,7 +343,8 @@ internal object ProviderReasoning {
     private fun isLegacyReasoningModel(sourceType: String, modelId: String): Boolean {
         val model = modelId.trim().lowercase()
         return when (sourceType) {
-            ProviderSourceTypes.OPENAI -> model.startsWith("gpt-5") || model.startsWith("o")
+            ProviderSourceTypes.OPENAI ->
+                model.startsWith("gpt-5") || model.startsWith("gpt-6") || model.startsWith("o")
             ProviderSourceTypes.ANTHROPIC -> model.startsWith("claude-")
             ProviderSourceTypes.BAILIAN ->
                 model.startsWith("qwen3.7-") ||
@@ -316,8 +353,11 @@ internal object ProviderReasoning {
                     "deepseek" in model
             ProviderSourceTypes.DEEPSEEK -> true
             ProviderSourceTypes.MOONSHOT -> model.startsWith("kimi-")
-            ProviderSourceTypes.MIMO -> model.startsWith("mimo-v2.5")
-            ProviderSourceTypes.STEPFUN -> model.startsWith("step-3.5-flash-2603")
+            ProviderSourceTypes.MIMO -> model.startsWith("mimo-v2.5") || model.startsWith("mimo-v2.6")
+            ProviderSourceTypes.STEPFUN ->
+                model == "step-5-preview" ||
+                    model == "step-3.7-flash" ||
+                    model.startsWith("step-3.5-flash-2603")
             ProviderSourceTypes.OPENROUTER -> true
             ProviderSourceTypes.MINIMAX,
             ProviderSourceTypes.SILICONFLOW,

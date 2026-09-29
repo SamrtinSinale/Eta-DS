@@ -11,6 +11,7 @@ import org.json.JSONObject
 
 internal object AnthropicMessagesProvider : AgentProviderClient {
     private const val DEFAULT_MAX_TOKENS = 4096
+    private const val ADAPTIVE_MODEL_DEFAULT_MAX_TOKENS = 16_384
     private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
     override val id: String = "anthropic_messages"
@@ -85,6 +86,9 @@ internal object AnthropicMessagesProvider : AgentProviderClient {
     ): JSONObject {
         val systemParts = mutableListOf<String>()
         val anthropicMessages = JSONArray()
+        val latestAssistantIndex = (messages.length() - 1 downTo 0).firstOrNull { index ->
+            messages.optJSONObject(index)?.optString("role") == "assistant"
+        }
         for (index in 0 until messages.length()) {
             val message = messages.optJSONObject(index) ?: continue
             when (message.optString("role")) {
@@ -99,7 +103,7 @@ internal object AnthropicMessagesProvider : AgentProviderClient {
                 "assistant" -> anthropicMessages.put(
                     JSONObject()
                         .put("role", "assistant")
-                        .put("content", convertAssistantContent(message))
+                        .put("content", convertAssistantContent(message, index == latestAssistantIndex))
                 )
                 "tool" -> anthropicMessages.put(
                     JSONObject()
@@ -119,7 +123,7 @@ internal object AnthropicMessagesProvider : AgentProviderClient {
 
         return JSONObject()
             .put("model", config.model)
-            .put("max_tokens", DEFAULT_MAX_TOKENS)
+            .put("max_tokens", defaultMaxTokens(config.model))
             .put("stream", true)
             .put("messages", anthropicMessages)
             .also { request ->
@@ -127,9 +131,19 @@ internal object AnthropicMessagesProvider : AgentProviderClient {
                 if (system.isNotBlank()) request.put("system", system)
                 convertTools(tools)?.let { request.put("tools", it) }
                 RequestBodyMerge.mergeCustomBody(request, config.customBody)
+                val explicitMaxTokens = request.opt("max_tokens")
+                    .takeIf { config.customBody.any { body -> body.key == "max_tokens" } }
                 ProviderReasoning.applyAnthropicRequest(request, config)
+                if (explicitMaxTokens != null) request.put("max_tokens", explicitMaxTokens)
             }
     }
+
+    private fun defaultMaxTokens(model: String): Int =
+        if (model.trim().lowercase() in setOf("claude-fable-5-1", "claude-opus-5-5")) {
+            ADAPTIVE_MODEL_DEFAULT_MAX_TOKENS
+        } else {
+            DEFAULT_MAX_TOKENS
+        }
 
     private fun convertUserContent(content: Any?): JSONArray =
         when (content) {
@@ -148,7 +162,10 @@ internal object AnthropicMessagesProvider : AgentProviderClient {
             else -> JSONArray().put(JSONObject().put("type", "text").put("text", providerMessageText(content)))
         }
 
-    private fun convertAssistantContent(message: JSONObject): JSONArray {
+    private fun convertAssistantContent(message: JSONObject, preserveOpaque: Boolean): JSONArray {
+        if (preserveOpaque) {
+            AnthropicEphemeralState.contentBlocks(message)?.let { return JSONArray(it.toString()) }
+        }
         val content = JSONArray()
         providerMessageText(message.opt("content"))
             .takeIf { it.isNotBlank() && it != "null" }
@@ -240,8 +257,14 @@ internal object AnthropicMessagesProvider : AgentProviderClient {
             !sawMessageStop
         }
         if (!sawMessageStop) throw AgentModelFailure.incompleteStream("Anthropic SSE 流未正常结束")
-        if (blocks.values.any { it.type in setOf("text", "thinking", "tool_use") && !it.stopped }) {
+        if (blocks.values.any { it.type in setOf("text", "thinking", "redacted_thinking", "tool_use") && !it.stopped }) {
             throw AgentModelFailure.incompleteStream("Anthropic SSE 内容块未正常结束")
+        }
+        val toolCalls = blocks.values
+            .filter { it.type == "tool_use" && it.name.isNotBlank() }
+            .sortedBy { it.index }
+        if (toolCalls.isNotEmpty() && blocks.values.any { it.type == "thinking" && it.signature.isEmpty() }) {
+            throw AgentModelFailure.incompleteStream("Anthropic SSE 工具回合缺少思考签名")
         }
 
         return JSONObject()
@@ -251,10 +274,10 @@ internal object AnthropicMessagesProvider : AgentProviderClient {
             .put("finish_reason", finishReason.orEmpty())
             .also { message ->
                 usage?.let { message.put("usage", it.toJson()) }
-                val toolCalls = blocks.values
-                    .filter { it.type == "tool_use" && it.name.isNotBlank() }
-                    .sortedBy { it.index }
                 if (toolCalls.isNotEmpty()) {
+                    val toolCallIds = toolCalls.mapIndexed { position, block ->
+                        block.index to block.id.ifBlank { "tool_call_$position" }
+                    }.toMap()
                     message.put(
                         "tool_calls",
                         JSONArray().also { array ->
@@ -262,6 +285,14 @@ internal object AnthropicMessagesProvider : AgentProviderClient {
                                 array.put(block.toToolCallJson(position))
                             }
                         }
+                    )
+                    AnthropicEphemeralState.attachContentBlocks(
+                        message,
+                        JSONArray().also { array ->
+                            blocks.values.sortedBy { it.index }
+                                .mapNotNull { block -> block.toContentBlockJson(toolCallIds[block.index]) }
+                                .forEach(array::put)
+                        },
                     )
                 }
             }
@@ -319,7 +350,9 @@ internal object AnthropicMessagesProvider : AgentProviderClient {
                     index = index,
                     type = block.optString("type"),
                     id = block.optString("id"),
-                    name = block.optString("name")
+                    name = block.optString("name"),
+                    initialContent = JSONObject(block.toString()),
+                    signature = StringBuilder(block.optString("signature")),
                 )
                 block.optJSONObject("input")
                     ?.takeIf { it.length() > 0 }
@@ -356,6 +389,9 @@ internal object AnthropicMessagesProvider : AgentProviderClient {
                     "thinking_delta" -> {
                         val block = blocks.getOrPut(index) { AnthropicBlock(index = index, type = "thinking") }
                         appendVisibleDelta(block, (delta.opt("thinking") as? String).orEmpty())
+                    }
+                    "signature_delta" -> {
+                        blocks[index]?.signature?.append(delta.optString("signature"))
                     }
                     "input_json_delta" -> {
                         val partial = delta.optString("partial_json")
@@ -411,6 +447,8 @@ internal object AnthropicMessagesProvider : AgentProviderClient {
         var id: String = "",
         var name: String = "",
         var stopped: Boolean = false,
+        val initialContent: JSONObject = JSONObject(),
+        val signature: StringBuilder = StringBuilder(),
         val text: StringBuilder = StringBuilder(),
         val thinking: StringBuilder = StringBuilder(),
         val arguments: StringBuilder = StringBuilder()
@@ -421,6 +459,22 @@ internal object AnthropicMessagesProvider : AgentProviderClient {
                 "thinking" -> thinking.toString()
                 else -> arguments.toString()
             }
+
+        fun toContentBlockJson(toolCallId: String?): JSONObject? = when (type) {
+            "text" -> JSONObject(initialContent.toString()).put("text", text.toString())
+            "thinking" -> JSONObject(initialContent.toString())
+                .put("thinking", thinking.toString())
+                .also { content ->
+                    if (signature.isNotEmpty()) content.put("signature", signature.toString())
+                    else content.remove("signature")
+                }
+            "redacted_thinking" -> JSONObject(initialContent.toString())
+            "tool_use" -> JSONObject(initialContent.toString())
+                .put("id", toolCallId ?: id)
+                .put("name", name)
+                .put("input", AnthropicMessagesProvider.parseJsonObject(arguments.toString()))
+            else -> null
+        }
 
         fun toToolCallJson(position: Int): JSONObject =
             JSONObject()
@@ -475,4 +529,35 @@ internal object AnthropicMessagesProvider : AgentProviderClient {
         }
 
 
+}
+
+/** 只在当前 Agent run 的工具回合保留 Anthropic 签名块；稳定会话 DTO 不序列化该字段。 */
+internal object AnthropicEphemeralState {
+    private const val CONTENT_BLOCKS_KEY = "_eta_anthropic_content_blocks"
+
+    fun contentBlocks(message: JSONObject): JSONArray? = message.optJSONArray(CONTENT_BLOCKS_KEY)
+
+    fun attachContentBlocks(message: JSONObject, blocks: JSONArray) {
+        message.put(CONTENT_BLOCKS_KEY, JSONArray(blocks.toString()))
+    }
+
+    fun copyContentBlocks(source: JSONObject, target: JSONObject) {
+        contentBlocks(source)?.let { attachContentBlocks(target, it) }
+    }
+
+    fun hasPendingToolResponse(messages: JSONArray): Boolean {
+        for (index in messages.length() - 1 downTo 0) {
+            val message = messages.optJSONObject(index) ?: continue
+            if (message.optString("role") == "assistant") {
+                return contentBlocks(message) != null &&
+                    AgentConversationCodec.parseToolCalls(message).isNotEmpty()
+            }
+        }
+        return false
+    }
+
+    fun withoutContentBlocks(message: JSONObject): JSONObject =
+        if (contentBlocks(message) == null) message else JSONObject(message.toString()).apply {
+            remove(CONTENT_BLOCKS_KEY)
+        }
 }

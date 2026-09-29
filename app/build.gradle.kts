@@ -38,8 +38,8 @@ android {
         targetSdk = 36
         // versionCode 规则：yyyyMMdd + 两位当日序号（01 起），发版时随 versionName 一起手动递增。
         // 通过 CI 构建时可由 ETA_VERSION_NAME / ETA_VERSION_CODE 覆盖。
-        versionCode = ciVersionCode ?: 2026092301
-        versionName = ciVersionName ?: "3.0.5"
+        versionCode = ciVersionCode ?: 2026092801
+        versionName = ciVersionName ?: "3.0.6"
     }
 
     signingConfigs {

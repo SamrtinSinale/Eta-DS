@@ -88,6 +88,12 @@ internal fun ModelProviderListScreen(
         item(key = "create_section") {
             ProviderSection(title = stringResource(R.string.ui_add_new_provider_74df54)) {
                 EtaArrowPreference(
+                    title = "从目录添加",
+                    summary = "浏览可用提供商并选择模型",
+                    onClick = { onNavigate(AppRoute.CommunityCatalog) },
+                )
+
+                EtaArrowPreference(
                     title = stringResource(R.string.ui_added_openai_compatible_6bd471),
                     summary = stringResource(R.string.ui_support_chatgpt_deepseek_kimi_glm_qwen_etc_b31d02),
                     startAction = {

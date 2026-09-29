@@ -56,6 +56,50 @@ class AgentModelClientLoopTest {
     }
 
     @Test
+    fun signedAnthropicToolRoundKeepsTheOriginalToolAndSystemDeclarations() {
+        var root = true
+        var captures = 0
+        val firstAssistant = assistant(
+            finishReason = "tool_calls",
+            toolCalls = listOf(toolCall("signed-call", "get_current_context", "{}")),
+        ).also { response ->
+            AnthropicEphemeralState.attachContentBlocks(response, JSONArray()
+                .put(JSONObject().put("type", "thinking").put("thinking", "")
+                    .put("signature", "signed-prefix"))
+                .put(JSONObject().put("type", "tool_use").put("id", "signed-call")
+                    .put("name", "get_current_context").put("input", JSONObject())))
+        }
+        val provider = ScriptedProvider(listOf(
+            { request, _ ->
+                assertTrue(request.tools.toString().contains("set_setting"))
+                assertTrue(request.messages.toString().contains("相关应用私有文件与数据库"))
+                firstAssistant
+            },
+            { request, _ ->
+                assertTrue(request.tools.toString().contains("set_setting"))
+                assertTrue(request.messages.toString().contains("相关应用私有文件与数据库"))
+                assistant(content = "完成", finishReason = "stop")
+            },
+        ))
+
+        AgentModelClient.complete(
+            config = modelConfig().copy(terminalTools = true, deviceSensitiveActionTools = true),
+            prompt = "开始",
+            provider = provider,
+            capabilitiesProvider = {
+                captures++
+                AgentToolCapabilities(rootAvailable = root)
+            },
+            toolExecutor = AgentModelClient.ToolExecutor {
+                root = false
+                AgentModelClient.ToolResult("工具结果")
+            },
+        )
+
+        assertEquals(2, captures)
+    }
+
+    @Test
     fun textOnlyRunReturnsIncrementalTranscript() {
         val provider = ScriptedProvider(
             assistant(content = "完成", finishReason = "stop")

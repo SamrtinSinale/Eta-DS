@@ -1,5 +1,6 @@
 package io.github.mangi.eta.ui.components
 
+import io.github.mangi.eta.ui.voice.SpeechPlaybackHost
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -209,53 +210,55 @@ internal fun AgentChatBody(
         }
     }
 
-    AgentChatScaffold(
-        visibleMessages = visibleMessages,
-        hasMessages = visibleMessages.isNotEmpty(),
-        scrollState = scrollState,
-        input = input,
-        modelPickerState = modelPickerState,
-        isCompacting = isCompacting,
-        contextUsage = contextUsage,
-        isStreaming = isStreaming,
-        reasoningEffort = reasoningEffort,
-        availableReasoningEfforts = availableReasoningEfforts,
-        pendingImages = pendingImages,
-        pendingFileReferences = pendingFileReferences,
-        messageEdit = messageEdit,
-        showEmptySuggestions = !isKeyboardVisible,
-        characterName = characterName,
-        keepBottomAnchored = keepBottomAnchored,
-        onBottomAnchorChanged = { keepBottomAnchored = it },
-        onSubmit = { text ->
-            sentFromKeyboard = true
-            // 发送即重新锚定底部：用户从历史上方直接发送时，同帧内 isStreaming 与
-            // 新消息一起到位，立即回到底部并恢复后续的流式平滑跟底。
-            keepBottomAnchored = true
-            onSubmit(text)
-        },
-        onReasoningEffortChange = onReasoningEffortChange,
-        onCompactContext = onCompactContext,
-        canCompactContext = canCompactContext,
-        onModelSelected = onModelSelected,
-        onStop = onStop,
-        onAttachImage = onAttachImage,
-        onRemoveImage = onRemoveImage,
-        onAttachFiles = onAttachFiles,
-        onAttachFolder = onAttachFolder,
-        onAttachFilePath = onAttachFilePath,
-        onRemoveFileReference = onRemoveFileReference,
-        onEditMessage = onEditMessage,
-        onCancelMessageEdit = onCancelMessageEdit,
-        onDeleteMessage = onDeleteMessage,
-        onRegenerateMessage = onRegenerateMessage,
-        onSelectReplyCandidate = onSelectReplyCandidate,
-        onSuggestionClick = onSuggestionClick,
-        onRunTraceClick = onRunTraceClick,
-        onOpenBrowser = onOpenBrowser,
-        currentBrowserMessageId = currentBrowserMessageId,
-        modifier = modifier,
-    )
+    SpeechPlaybackHost {
+        AgentChatScaffold(
+            visibleMessages = visibleMessages,
+            hasMessages = visibleMessages.isNotEmpty(),
+            scrollState = scrollState,
+            input = input,
+            modelPickerState = modelPickerState,
+            isCompacting = isCompacting,
+            contextUsage = contextUsage,
+            isStreaming = isStreaming,
+            reasoningEffort = reasoningEffort,
+            availableReasoningEfforts = availableReasoningEfforts,
+            pendingImages = pendingImages,
+            pendingFileReferences = pendingFileReferences,
+            messageEdit = messageEdit,
+            showEmptySuggestions = !isKeyboardVisible,
+            characterName = characterName,
+            keepBottomAnchored = keepBottomAnchored,
+            onBottomAnchorChanged = { keepBottomAnchored = it },
+            onSubmit = { text ->
+                sentFromKeyboard = true
+                // 发送即重新锚定底部：用户从历史上方直接发送时，同帧内 isStreaming 与
+                // 新消息一起到位，立即回到底部并恢复后续的流式平滑跟底。
+                keepBottomAnchored = true
+                onSubmit(text)
+            },
+            onReasoningEffortChange = onReasoningEffortChange,
+            onCompactContext = onCompactContext,
+            canCompactContext = canCompactContext,
+            onModelSelected = onModelSelected,
+            onStop = onStop,
+            onAttachImage = onAttachImage,
+            onRemoveImage = onRemoveImage,
+            onAttachFiles = onAttachFiles,
+            onAttachFolder = onAttachFolder,
+            onAttachFilePath = onAttachFilePath,
+            onRemoveFileReference = onRemoveFileReference,
+            onEditMessage = onEditMessage,
+            onCancelMessageEdit = onCancelMessageEdit,
+            onDeleteMessage = onDeleteMessage,
+            onRegenerateMessage = onRegenerateMessage,
+            onSelectReplyCandidate = onSelectReplyCandidate,
+            onSuggestionClick = onSuggestionClick,
+            onRunTraceClick = onRunTraceClick,
+            onOpenBrowser = onOpenBrowser,
+            currentBrowserMessageId = currentBrowserMessageId,
+            modifier = modifier,
+        )
+    }
 }
 
 @Composable

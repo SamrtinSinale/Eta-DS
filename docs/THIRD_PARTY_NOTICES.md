@@ -6,6 +6,10 @@ Eta 的免 Root Linux 后端以独立进程运行 [PRoot](https://github.com/ter
 
 APK 的 `assets/native-sources` 附带校验过的原始源码，以及从实际构建入口自动生成的脚本、PTY 源码和补丁包；`assets/licenses` 附带许可证全文。构建脚本与说明位于 [终端原生组件](TERMINAL_NATIVE.md)。这些独立第三方程序保持其开源许可权利，不受 Eta 主项目非商业许可证的附加限制。
 
+## models.dev 模型目录
+
+Eta 的离线模型目录快照来自 [models.dev](https://models.dev/api.json)，由 `scripts/update-models-dev-catalog.py` 获取原始 JSON 并压缩后随 APK 分发。models.dev 的目录数据和源码采用 [MIT License](https://github.com/anomalyco/models.dev/blob/dev/LICENSE)，版权归 © 2025 models.dev。版权与许可全文随 APK 保存在 [`assets/licenses/models-dev-MIT.txt`](../app/src/main/assets/licenses/models-dev-MIT.txt)。
+
 ## Miuix
 
 Eta 的应用界面使用 [Miuix](https://github.com/compose-miuix-ui/miuix)，其采用 [Apache License 2.0](https://github.com/compose-miuix-ui/miuix/blob/main/LICENSE)。

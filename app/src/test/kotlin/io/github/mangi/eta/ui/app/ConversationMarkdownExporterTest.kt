@@ -191,7 +191,7 @@ class ConversationMarkdownExporterTest {
             nowMillis = 0L,
         )
 
-        assertTrue(name.startsWith("Eta-abcdefghij-"))
+        assertTrue(name.startsWith("Eda-abcdefghij-"))
         assertTrue(name.endsWith(".md"))
         assertFalse(name.contains("/"))
     }
@@ -209,8 +209,8 @@ class ConversationMarkdownExporterTest {
             nowMillis = 0L,
         )
 
-        assertTrue(fallback.startsWith("Eta-Conversation-"))
-        assertTrue(spaced.startsWith("Eta-hello world again-"))
+        assertTrue(fallback.startsWith("Eda-Conversation-"))
+        assertTrue(spaced.startsWith("Eda-hello world again-"))
     }
 
     @Test
@@ -221,7 +221,7 @@ class ConversationMarkdownExporterTest {
             nowMillis = 0L,
         )
 
-        val match = Regex("^Eta-(.+)-\\d{8}-\\d{4}\\.md$").matchEntire(name)
+        val match = Regex("^Eda-(.+)-\\d{8}-\\d{4}\\.md$").matchEntire(name)
         assertTrue(match != null)
         assertEquals(40, match!!.groupValues[1].length)
     }

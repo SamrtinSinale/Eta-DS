@@ -134,6 +134,7 @@ internal object AgentConversationCodec {
                     message.put("reasoning_content", source.optString("reasoning_content"))
                 }
                 ResponsesEphemeralState.copyOutputItems(source, message)
+                AnthropicEphemeralState.copyContentBlocks(source, message)
             }
 
     fun toolResultMessage(

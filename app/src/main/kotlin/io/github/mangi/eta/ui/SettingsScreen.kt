@@ -569,6 +569,12 @@ private fun SettingsPageContent(
                     )
 
                     EtaPreferenceDivider()
+                    EtaArrowPreference(
+                        title = stringResource(R.string.speech_settings_title),
+                        startAction = { EtaPreferenceIcon(icon = Icons.Rounded.Mic, tint = EtaPreferenceColors.Blue) },
+                        onClick = { onNavigate(AppRoute.SpeechSettings) },
+                    )
+                    EtaPreferenceDivider()
                     LanguagePreference(iconTint = EtaPreferenceColors.Blue)
 
                     EtaPreferenceDivider()

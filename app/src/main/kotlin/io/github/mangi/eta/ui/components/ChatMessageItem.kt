@@ -1,5 +1,6 @@
 package io.github.mangi.eta.ui.components
 
+import io.github.mangi.eta.ui.voice.SpeechReadAloudButton
 import android.graphics.BitmapFactory
 import android.util.Base64
 import androidx.compose.animation.AnimatedContent
@@ -283,6 +284,7 @@ internal fun ChatMessageItem(
         )
         is AgentMessageUi -> AgentMessageBlock(
             message = message,
+            allowSpeech = true,
             assistantOverlay = assistantOverlay,
             retainedStreamingState = retainedStreamingState,
             showCopyAction = showCopyAction,
@@ -796,6 +798,7 @@ private fun ContextCompactionMarker(
 @Composable
 private fun AgentMessageBlock(
     message: AgentMessageUi,
+    allowSpeech: Boolean = false,
     assistantOverlay: Boolean = false,
     retainedStreamingState: StreamingMarkdownState?,
     showCopyAction: Boolean,
@@ -913,6 +916,7 @@ private fun AgentMessageBlock(
                         },
                     )
                 }
+                if (allowSpeech) SpeechReadAloudButton(message.id, message.content)
                 if (showMessageActions) {
                     if (message.characterEditable) {
                         IconButton(onClick = onEdit, enabled = messageActionsEnabled, minWidth = 30.dp, minHeight = 30.dp) {

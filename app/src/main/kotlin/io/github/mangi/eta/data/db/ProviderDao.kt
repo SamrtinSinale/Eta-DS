@@ -58,6 +58,25 @@ internal interface ProviderDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertModels(models: List<ProviderModelEntity>)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertModelsIgnoringConflicts(models: List<ProviderModelEntity>)
+
+    @Query(
+        """
+        UPDATE provider_models
+        SET reasoning_capabilities_json = :updatedJson
+        WHERE id = :modelId AND provider_id = :providerId AND model_id = :apiModelId
+            AND source = 'catalog' AND reasoning_capabilities_json = :previousJson
+        """
+    )
+    suspend fun updateCatalogReasoningCapabilitiesIfUnchanged(
+        providerId: String,
+        modelId: String,
+        apiModelId: String,
+        previousJson: String,
+        updatedJson: String,
+    ): Int
+
     @Query("DELETE FROM provider_models WHERE provider_id = :providerId")
     suspend fun deleteModelsForProvider(providerId: String)
 
@@ -85,6 +104,25 @@ internal interface ProviderDao {
         if (models.isNotEmpty()) {
             upsertModels(models)
         }
+    }
+
+    @Transaction
+    suspend fun appendModelsIfAbsent(
+        providerId: String,
+        candidates: List<ProviderModelEntity>,
+    ) {
+        if (candidates.isEmpty()) return
+        val stored = models(providerId)
+        val knownModelIds = stored.mapTo(mutableSetOf()) { it.modelId.trim().lowercase() }
+        var nextSortOrder = (stored.maxOfOrNull { it.sortOrder } ?: -1) + 1
+        val missing = candidates.mapNotNull { candidate ->
+            if (candidate.modelId.isBlank() || !knownModelIds.add(candidate.modelId.trim().lowercase())) {
+                null
+            } else {
+                candidate.copy(providerId = providerId, sortOrder = nextSortOrder++)
+            }
+        }
+        if (missing.isNotEmpty()) insertModelsIgnoringConflicts(missing)
     }
 
     @Transaction

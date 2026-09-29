@@ -83,12 +83,21 @@ internal class AgentLoop(
 
     fun run(): Result {
         var round = 1
+        var precedingTools: JSONArray? = null
 
         while (true) {
             runController.throwIfCancelled()
             if (purpose.allowsTools) appendPendingSteeringMessage()
 
-            val roundTools = if (purpose.allowsTools) toolsForRound?.invoke() ?: tools else JSONArray()
+            // Anthropic 思考签名绑定发出工具调用时的 system 与 tools；工具结果回传后再刷新目录。
+            val roundTools = if (AnthropicEphemeralState.hasPendingToolResponse(messages)) {
+                precedingTools ?: tools
+            } else if (purpose.allowsTools) {
+                toolsForRound?.invoke() ?: tools
+            } else {
+                JSONArray()
+            }
+            precedingTools = roundTools
             toolCallValidator = AgentToolCallValidator(roundTools)
             publishTranscript()
             context.compact(roundTools)

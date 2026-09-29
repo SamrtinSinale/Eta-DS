@@ -75,7 +75,7 @@ class AgentContextCompactionTest {
             } else {
                 assertTrue(request.messages.toString().contains("最新请求必须保留"))
                 assertTrue(request.messages.toString().contains("固定约束"))
-                assertTrue(request.messages.toString().contains("Eta 上下文摘要"))
+                assertTrue(request.messages.toString().contains("Eda 上下文摘要"))
                 response("完成最新请求")
             }
         }
@@ -176,6 +176,64 @@ class AgentContextCompactionTest {
         assertFalse(AgentContextCompactor.canSplit(messages, 1))
         assertFalse(AgentContextCompactor.canSplit(messages, 2))
         assertTrue(AgentContextCompactor.canSplit(messages, 3))
+    }
+
+    @Test
+    fun signedAnthropicToolRoundCannotCompactBeforeReturningToolResults() {
+        val messages = jsonHistory()
+        messages.put(AgentConversationCodec.userTextMessage("继续查询"))
+        val assistant = JSONObject().put("role", "assistant").put("content", "")
+            .put("tool_calls", JSONArray().put(JSONObject().put("id", "toolu_current")
+                .put("type", "function").put("function", JSONObject().put("name", "device_info")
+                    .put("arguments", "{}"))))
+        AnthropicEphemeralState.attachContentBlocks(assistant, JSONArray()
+            .put(JSONObject().put("type", "thinking").put("thinking", "")
+                .put("signature", "CURRENT_SIGNATURE"))
+            .put(JSONObject().put("type", "tool_use").put("id", "toolu_current")
+                .put("name", "device_info").put("input", JSONObject())))
+        messages.put(assistant)
+        messages.put(JSONObject().put("role", "tool").put("tool_call_id", "toolu_current")
+            .put("content", "工具结果"))
+        val original = messages.toString()
+        val session = AgentContextSession(config, messages, 1, "operation", provider { _, _ ->
+            fail("签名未用前不能改写历史")
+            response("不应执行")
+        }, AgentRunController(), { emptySet() }, {}, { fail("不应提交快照") })
+
+        val failure = assertThrows(AgentModelFailure::class.java) {
+            session.compact(JSONArray(), force = true)
+        }
+        assertEquals("ANTHROPIC_THINKING_CONTEXT_LOCKED", failure.code)
+        assertEquals(original, messages.toString())
+        assertNull(session.snapshot())
+    }
+
+    @Test
+    fun compactionDropsCompletedAnthropicSignaturesAfterChangingPrefix() {
+        val messages = jsonHistory()
+        messages.put(AgentConversationCodec.userTextMessage("已完成的工具任务"))
+        val assistant = JSONObject().put("role", "assistant").put("content", "读取中")
+            .put("tool_calls", JSONArray().put(JSONObject().put("id", "toolu_old")
+                .put("type", "function").put("function", JSONObject().put("name", "device_info")
+                    .put("arguments", "{}"))))
+        AnthropicEphemeralState.attachContentBlocks(assistant, JSONArray()
+            .put(JSONObject().put("type", "thinking").put("thinking", "")
+                .put("signature", "STALE_SIGNATURE"))
+            .put(JSONObject().put("type", "tool_use").put("id", "toolu_old")
+                .put("name", "device_info").put("input", JSONObject())))
+        messages.put(assistant)
+        messages.put(JSONObject().put("role", "tool").put("tool_call_id", "toolu_old")
+            .put("content", "完成"))
+        messages.put(JSONObject().put("role", "assistant").put("content", "查询完成"))
+        messages.put(AgentConversationCodec.userTextMessage("新的问题"))
+
+        val compacted = AgentContextCompactor(config, provider { _, _ ->
+            response("此前任务已完成。")
+        }, AgentRunController()).compact(messages, 1, emptySet(), force = true)
+
+        assertFalse(compacted.toString().contains("STALE_SIGNATURE"))
+        assertTrue(compacted.toString().contains("新的问题"))
+        assertTrue(compacted.toString().contains("toolu_old"))
     }
 
     @Test
