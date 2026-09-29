@@ -7,4 +7,6 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <!-- 品牌蓝：启动图标底色，与 drawable-nodpi/ic_launcher_foreground.png 配套 -->
+    <color name="brand_blue">#FF1661FD</color>
 </resources>
