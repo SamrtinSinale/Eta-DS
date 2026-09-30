@@ -1,6 +1,7 @@
 package io.github.mangi.eta.agent.dsh
 
 import android.content.Context
+import android.util.Base64
 import android.util.Log
 import io.github.mangi.eta.agent.model.AgentConversationCodec
 import io.github.mangi.eta.agent.model.AgentModelClient
@@ -38,9 +39,20 @@ internal class DshAcpRuntime(
 ) {
     fun execute(session: AgentRuntimeSession, request: AgentRuntimeWire.RunRequest): Boolean {
         val text = request.prompt?.trim().orEmpty()
-        if (text.isEmpty()) {
+        // 只贴图不打字是合法的：dsh 的准入条件是「有图片，或有非空文本」，二者其一即可。
+        // 这里以前只看 text，于是纯图片消息在发出去之前就被判成"消息为空"——
+        // 表现就是用户贴了图却收到"消息为空"，只能改成手动发图片路径。
+        val images = request.images.mapNotNull { acpImage(it.reference) }
+        if (text.isEmpty() && images.isEmpty()) {
             finishWithFailure(session, "消息为空")
             return false
+        }
+        if (request.images.isNotEmpty() && images.isEmpty()) {
+            Log.w(
+                TAG,
+                "dropped ${request.images.size} image(s): reference is not an inline data URL " +
+                    "in dsh's accepted raster vocabulary",
+            )
         }
         val sessionKey = request.effectiveModelSessionId
         // 只有历史仍是上次那段前缀、且模型没换，才允许续接；否则重开会话并注入历史。
@@ -233,6 +245,16 @@ internal class DshAcpRuntime(
             var record: DshAcpSessionState? = null
             runBlocking {
                 client.initialize()
+                // dsh 只在自己声明了 image 能力时才收图片。没声明通常意味着模型不在它的
+                // 模型目录里（自定义网关的模型名），被当成纯文本了；此时硬发会被
+                // invalidParams 顶回来，不如在这里给出能照着修的说明。
+                if (images.isNotEmpty() && !client.imagePromptEnabled) {
+                    throw DshAcpException(
+                        "当前模型未向 dsh 声明图片输入，本轮 ${images.size} 张图片发不出去。" +
+                            "需要在 dsh 的模型目录（llm-deepseek.config.models）里为该模型声明 " +
+                            "inputModalities: [text, image]",
+                    )
+                }
                 val resumableId = stored?.sessionId?.takeIf { resumable }
                 val resumedId = resumableId?.let { id ->
                     runCatching {
@@ -273,14 +295,14 @@ internal class DshAcpRuntime(
                 round = 1
                 session.emit(
                     AgentEvent.RunStarted(
-                        initialImages = 0,
-                        initialImageBytes = 0,
+                        initialImages = images.size,
+                        initialImageBytes = request.images.sumOf { it.bytes },
                         toolCount = 0,
                         terminalTools = true,
                     )
                 )
                 session.emit(AgentEvent.RoundStarted(round = round, messageCount = 1))
-                promptWithRetry(client, dshSessionId, promptText)
+                promptWithRetry(client, dshSessionId, promptText, images)
             }
             closeOpenBlock()
             val transcriptMessages = transcript.build()
@@ -317,12 +339,17 @@ internal class DshAcpRuntime(
      * 网关偶发 502 / 连接被重置时，dsh 只发一次请求就放弃；这里补上与 App 内 Agent Loop
      * 一致的重试。只在"请求根本没建立"这类传输层错误上重试，避免重放已经执行过的工具。
      */
-    private suspend fun promptWithRetry(client: DshAcpClient, sessionId: String, text: String) {
+    private suspend fun promptWithRetry(
+        client: DshAcpClient,
+        sessionId: String,
+        text: String,
+        images: List<DshAcpClient.AcpImage> = emptyList(),
+    ) {
         var attempt = 0
         while (true) {
             attempt += 1
             try {
-                client.prompt(sessionId, text)
+                client.prompt(sessionId, text, images)
                 return
             } catch (throwable: Throwable) {
                 val reason = throwable.message.orEmpty()
@@ -476,6 +503,48 @@ internal class DshAcpRuntime(
         private val RETRYABLE_MARKERS = listOf("API request", "超时（", "Connection", "ECONNRESET", "socket")
         private const val DSH_ENTRY_RELATIVE = "usr/local/lib/node_modules/@deepseek-ai/dsh/lib/bin.js"
         private const val OFFICIAL_ROUTE = "deepseek-official"
+        private const val BASE64_SUFFIX = ";base64"
+        private const val DATA_URL_PREFIX = "data:"
+
+        /** dsh 的 ACP 只接受这四种栅格格式的内联图片，其余一律 invalidParams。 */
+        private val ACP_IMAGE_MIME_TYPES = setOf(
+            "image/png",
+            "image/jpeg",
+            "image/webp",
+            "image/gif",
+        )
+
+        /**
+         * 把 Eta 的图片引用转成 ACP 的 image content block。
+         *
+         * dsh 侧只认**内联的规范 base64**：不接受远程 URL，也不接受带换行或非标准
+         * padding 的 base64（它会用 `Buffer.from(data,'base64').toString('base64')`
+         * 回环比对，不一致就报 "image data must be canonical base64"）。
+         *
+         * 所以这里先解码再以 NO_WRAP 重新编码——无论调用方传进来的是不是规范形式，
+         * 出去的一定是。Eta 的附件编码本来就是 `data:image/jpeg;base64,<NO_WRAP>`，
+         * 这一步实际是恒等变换，但它挡住了未来任何换编码器带来的回归。
+         *
+         * 不支持的引用（远程 URL、content://、裸路径、非白名单 mime）返回 null，
+         * 由调用方按"这张图没带上"处理。
+         */
+        internal fun acpImage(reference: String): DshAcpClient.AcpImage? {
+            if (!reference.startsWith(DATA_URL_PREFIX, ignoreCase = true)) return null
+            val separator = reference.indexOf(',')
+            if (separator <= 0) return null
+            val header = reference.substring(DATA_URL_PREFIX.length, separator)
+            if (!header.endsWith(BASE64_SUFFIX, ignoreCase = true)) return null
+            val mime = header.substring(0, header.length - BASE64_SUFFIX.length).lowercase()
+            if (mime !in ACP_IMAGE_MIME_TYPES) return null
+            val canonical = runCatching {
+                Base64.encodeToString(
+                    Base64.decode(reference.substring(separator + 1), Base64.DEFAULT),
+                    Base64.NO_WRAP,
+                )
+            }.getOrNull() ?: return null
+            if (canonical.isEmpty()) return null
+            return DshAcpClient.AcpImage(mimeType = mime, data = canonical)
+        }
 
         /**
          * 历史注入的字符预算：模型窗口的一个份额，而不是固定字符数。
