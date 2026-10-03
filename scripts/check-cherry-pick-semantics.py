@@ -5,7 +5,8 @@
     python3 scripts/check-cherry-pick-semantics.py <BASE>            # 比较 BASE..HEAD
     python3 scripts/check-cherry-pick-semantics.py <BASE>..<TIP>     # 显式范围（用于反向自检）
 
-它抓的是：**上游删掉了一个 import，而我们的代码还在用它**。git 只做文本合并，这种情况会干净地
+**备用脚本，手动跑**（不被 check-invariants.sh 调用、不进 CI）。它抓的是：
+**上游删掉了一个 import，而我们的代码还在用它**。git 只做文本合并，这种情况会干净地
 合过去，直到 CI 才炸 `Unresolved reference`。真实案例：上游重构设置页时删掉了
 `androidx.compose.material.icons.rounded.Memory` 的 import，而我们在"重装对话运行时"那行仍在用。
 

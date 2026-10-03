@@ -4,15 +4,21 @@
 #
 # 用法：bash scripts/check-invariants.sh
 #
-# 姊妹脚本：scripts/check-cherry-pick-semantics.py —— **同步上游时**用它（抓"上游删了 import
-# 而我们还在用"这类 git 看不见的冲突）。它与本脚本一样不进 CI（语义断言会被合法重构搞过期），
-# 属于提交前按需跑的辅助。
+# 编译检查（本地，10 秒级）：scripts/compile-local.sh —— 覆盖 core 的护栏/回收/日志、
+# 终端路径常量、身份常量。**范围是子集**（agent/model、agent/dsh、UI 会牵出 Room/AndroidX 等
+# 一堆 jar，交回 CI），前置与限制写在那个脚本头部。
+#
+# 姊妹脚本：scripts/check-cherry-pick-semantics.py —— **同步上游时手动跑**的备用脚本（抓"上游删了
+# import 而我们还在用"这类 git 看不见的冲突）。它**不被本脚本调用、也不进 CI**：语义断言会被合法
+# 重构搞过期，当门禁会假失败。用法：python3 scripts/check-cherry-pick-semantics.py <BASE>。
 #
 # 为什么**不**接进 CI：它钉的是"坏写法不存在"这类语义模式（例如"别在日志里硬写 purge leftovers"），
 # 合法重构可能让它过期 —— 我们已经被过期断言坑过两次（钉住 `purgeAsRoot` 的确切写法，下一轮重构
 # 就失效）。所以它是给人/agent 在提交前跑的辅助；CI 那边装的是两个**判定保守**的静态检查
 # （scripts/check-junit-imports.py、scripts/check-kotlin-comment-nesting.py）。
-set -u
+# 注意：本行只保护**本脚本内部**的管道。调用方写 `bash check-invariants.sh | tail` 时，
+# 失败状态会被外层管道吞掉 —— 那要调用方自己 `set -o pipefail`（或看本脚本的 exit code）。
+set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO" || exit 1
 
@@ -67,6 +73,25 @@ echo "=== 就绪判据 ==="
 check "expectedBaseVersion 转发" 1 "$(grep -c 'rootfsReady(rootfs.absolutePath, expectedBaseVersion)' $terminal/DebianEnvironmentInstaller.kt)"
 check "DEFAULT_SYSTEM_PROMPT 只声明一次" 1 "$(grep -rc '^    val DEFAULT_SYSTEM_PROMPT:' app/src/main --include='*.kt' | awk -F: '{s+=$2} END {print s+0}')"
 check "const DEFAULT_SYSTEM_PROMPT 残留" 0 "$(grep -rc 'const val DEFAULT_SYSTEM_PROMPT' app/src/main --include='*.kt' | awk -F: '{s+=$2} END {print s+0}')"
+
+echo "=== 退避 stamp 只声明一处 ==="
+# 判据是「第二份不存在」，不钉新写法的形状：两条回收路径曾各有一份**逐字相同**的实现，
+# 改语义漏一处就是数据安全那类事故（见 core/SweepStamp.kt 的 KDoc）。
+check "data class SweepStamp 声明处" 1 "$(grep -rc 'data class SweepStamp' app/src/main/kotlin --include='*.kt' | awk -F: '{s+=$2} END {print s+0}')"
+check "parseSweepStamp 声明处" 1 "$(grep -rc 'fun parseSweepStamp' app/src/main/kotlin --include='*.kt' | awk -F: '{s+=$2} END {print s+0}')"
+check "shouldSkipSweep 声明处" 1 "$(grep -rc 'fun shouldSkipSweep' app/src/main/kotlin --include='*.kt' | awk -F: '{s+=$2} END {print s+0}')"
+check "旧短名 shouldSkip 残留" 0 "$(grep -rc 'fun shouldSkip(' app/src/main/kotlin --include='*.kt' | awk -F: '{s+=$2} END {print s+0}')"
+check "两侧退避窗口都是 24h" 2 "$(grep -rc '24 \* 60 \* 60 \* 1000L' app/src/main/kotlin/io/github/mangi/eta/core/StaleRetirementSweeper.kt app/src/main/kotlin/io/github/mangi/eta/agent/dsh/DshRuntimeInstaller.kt | awk -F: '{s+=$2} END {print s+0}')"
+
+echo "=== Android 终端路径只声明一处 ==="
+# 允许出现的位置：常量定义文件本身。注意判据里的字符类 —— 要排除
+# `/data/local/tmp/eta_window.xml`（uiautomator 的 dump 文件，只是**共享前缀**，另一回事）。
+# 测试里的字面量是**故意保留**的：它们钉的是 shell payload 的对外契约，改了根路径就该报警。
+check "BASE 字面量只出现在常量定义处" 0 "$(
+  grep -rnE 'data/local/tmp/eta(["\''/$]|$)' app/src/main/kotlin --include='*.kt' \
+    | grep -v 'AndroidTerminalPaths.kt' | wc -l
+)"
+check "BASE 常量声明处" 1 "$(grep -c 'const val BASE = ' app/src/main/kotlin/io/github/mangi/eta/agent/terminal/AndroidTerminalPaths.kt)"
 
 echo "=== 身份文案只有一处声明 ==="
 check "ROLE_NAME 声明处" 1 "$(grep -rc 'const val ROLE_NAME = ' app/src/main/kotlin --include='*.kt' | awk -F: '{s+=$2} END {print s+0}')"

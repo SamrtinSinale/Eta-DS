@@ -25,7 +25,7 @@ internal class UserTerminalController(
 ) : AutoCloseable {
 
     private companion object {
-        const val DEFAULT_CWD = "/data/local/tmp/eta"
+        const val DEFAULT_CWD = AndroidTerminalPaths.BASE
         const val LINUX_DEFAULT_CWD = "/workspace"
         const val MAX_COMMAND_CHARS = 16_000
         const val MAX_SESSIONS = 6

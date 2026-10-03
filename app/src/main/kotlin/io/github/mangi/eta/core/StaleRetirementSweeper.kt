@@ -62,23 +62,6 @@ internal object StaleRetirementSweeper {
     private fun isSymlink(file: File): Boolean =
         runCatching { Files.isSymbolicLink(file.toPath()) }.getOrDefault(false)
 
-    /** 上次 sweep 的记录：名单 + 时间（和 `DshRuntimeInstaller` 那套退避同形）。 */
-    internal data class SweepStamp(val names: List<String>, val attemptedAtMs: Long)
-
-    internal fun parseStamp(raw: String?): SweepStamp? {
-        val lines = raw?.lines()?.filter { it.isNotBlank() } ?: return null
-        val time = lines.lastOrNull()?.toLongOrNull() ?: return null
-        return SweepStamp(names = lines.dropLast(1), attemptedAtMs = time)
-    }
-
-    internal fun shouldSkip(
-        stamp: SweepStamp?,
-        nowMs: Long,
-        names: List<String>,
-        windowMs: Long = RETRY_WINDOW_MS,
-    ): Boolean =
-        stamp != null && stamp.names == names && nowMs - stamp.attemptedAtMs in 0 until windowMs
-
     /**
      * 尽力回收，返回实际释放的目录数。
      *
@@ -97,8 +80,8 @@ internal object StaleRetirementSweeper {
 
         val stampFile = File(filesDir, STAMP_NAME)
         val names = victims.map { it.absolutePath }
-        val stamp = parseStamp(runCatching { stampFile.readText() }.getOrNull())
-        if (shouldSkip(stamp, System.currentTimeMillis(), names)) return 0
+        val stamp = parseSweepStamp(runCatching { stampFile.readText() }.getOrNull())
+        if (shouldSkipSweep(stamp, System.currentTimeMillis(), names, RETRY_WINDOW_MS)) return 0
         runCatching {
             stampFile.writeText(names.joinToString("\n") + "\n" + System.currentTimeMillis() + "\n")
         }

@@ -23,7 +23,7 @@ internal class RootShellTerminalController(
     private val rootAvailable: () -> Boolean = { TerminalRuntime.rootAvailable },
 ) : AutoCloseable {
     private companion object {
-        const val DEFAULT_CWD = "/data/local/tmp/eta"
+        const val DEFAULT_CWD = AndroidTerminalPaths.BASE
         const val LINUX_DEFAULT_CWD = "/workspace"
         const val USER_STORAGE = "/storage/emulated/0"
         const val DEFAULT_TIMEOUT_SECONDS = 30

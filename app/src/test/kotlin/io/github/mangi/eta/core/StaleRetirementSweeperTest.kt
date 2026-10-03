@@ -21,6 +21,11 @@ import org.robolectric.annotation.Config
 @Config(sdk = [36])
 class StaleRetirementSweeperTest {
 
+    /** 共享编解码的窗口由调用方给；这里等价于本对象的 RETRY_WINDOW_MS。 */
+    private fun skip(stamp: SweepStamp?, nowMs: Long, names: List<String>): Boolean =
+        shouldSkipSweep(stamp, nowMs, names, StaleRetirementSweeper.RETRY_WINDOW_MS)
+
+
     @get:Rule
     val temporaryFolder = TemporaryFolder()
 
@@ -101,25 +106,25 @@ class StaleRetirementSweeperTest {
     @Test
     fun sweepBacksOffForTheSameBatch() {
         val now = 1_000_000_000_000L
-        val stamp = StaleRetirementSweeper.SweepStamp(listOf("a.broken-1790864453989"), now - 1_000)
+        val stamp = SweepStamp(listOf("a.broken-1790864453989"), now - 1_000)
 
         assertTrue(
             "同一批 + 窗口内应当跳过",
-            StaleRetirementSweeper.shouldSkip(stamp, now, listOf("a.broken-1790864453989")),
+            skip(stamp, now, listOf("a.broken-1790864453989")),
         )
         assertTrue(
             "出现新残骸要立刻重试",
-            !StaleRetirementSweeper.shouldSkip(
+            !skip(
                 stamp, now, listOf("a.broken-1790864453989", "b.broken-1790864453990"),
             ),
         )
         assertTrue(
             "窗口过了要重试",
-            !StaleRetirementSweeper.shouldSkip(
+            !skip(
                 stamp, stamp.attemptedAtMs + 25 * 60 * 60 * 1000L, listOf("a.broken-1790864453989"),
             ),
         )
-        assertTrue("没有记录就别跳过", !StaleRetirementSweeper.shouldSkip(null, now, emptyList()))
+        assertTrue("没有记录就别跳过", !skip(null, now, emptyList()))
     }
 
     /**
@@ -228,13 +233,13 @@ class StaleRetirementSweeperTest {
     fun sweepStampRoundTrips() {
         val raw = "a.broken-1790864453989\nb.broken-1790864453990\n1790864453989\n"
 
-        val stamp = StaleRetirementSweeper.parseStamp(raw)
+        val stamp = parseSweepStamp(raw)
 
         assertEquals(
             listOf("a.broken-1790864453989", "b.broken-1790864453990"),
             stamp?.names,
         )
         assertEquals(1790864453989L, stamp?.attemptedAtMs)
-        assertEquals(null, StaleRetirementSweeper.parseStamp("garbage"))
+        assertEquals(null, parseSweepStamp("garbage"))
     }
 }

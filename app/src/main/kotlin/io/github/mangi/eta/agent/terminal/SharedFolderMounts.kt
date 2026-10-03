@@ -22,7 +22,7 @@ internal object SharedFolderMounts {
     const val PREFS_KEY = "linux_shared_mounts"
     const val MAX_MOUNTS = 16
     const val LINUX_MOUNTS_ROOT = "/workspace/mounts"
-    const val ANDROID_MOUNTS_ROOT = "/data/local/tmp/eta/mounts"
+    const val ANDROID_MOUNTS_ROOT = AndroidTerminalPaths.MOUNTS
 
     private val NAME_PATTERN = Regex("[A-Za-z0-9._-]{1,48}")
 
@@ -36,7 +36,7 @@ internal object SharedFolderMounts {
         "/vendor",
         "/apex",
         "/product",
-        "/data/local/tmp/eta",
+        AndroidTerminalPaths.BASE,
     )
 
     enum class SourceError {

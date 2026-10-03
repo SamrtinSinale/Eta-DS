@@ -1,5 +1,8 @@
 package io.github.mangi.eta.agent.dsh
 
+import io.github.mangi.eta.core.SweepStamp
+import io.github.mangi.eta.core.parseSweepStamp
+import io.github.mangi.eta.core.shouldSkipSweep
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -15,6 +18,14 @@ import org.junit.rules.TemporaryFolder
  * 解包，最后表现为永远"未就绪"。所以脚本必须：先摘挂载 → 再删 → 最后验一遍删干净。
  */
 class DshRuntimeInstallerPurgeTest {
+
+    /**
+     * 共享编解码的窗口由调用方给。installer 的窗口常量是 private，这里用等价字面量，
+     * 并由不变式钉住"两侧窗口都还是 24h"。
+     */
+    private fun skip(stamp: SweepStamp?, nowMs: Long, names: List<String>): Boolean =
+        shouldSkipSweep(stamp, nowMs, names, 24 * 60 * 60 * 1000L)
+
 
     @Test
     fun purgeScriptCanonicalisesPathsAndVerifiesBeforeDeletingAnything() {
@@ -115,39 +126,39 @@ class DshRuntimeInstallerPurgeTest {
     @Test
     fun sweepBackoffOnlySkipsTheSameBatchInsideTheWindow() {
         val now = 1_000_000_000_000L
-        val stamp = DshRuntimeInstaller.SweepStamp(listOf("dsh-runtime.broken-1"), now - 1_000)
+        val stamp = SweepStamp(listOf("dsh-runtime.broken-1"), now - 1_000)
 
         assertTrue(
             "同一批 + 窗口内应当跳过",
-            DshRuntimeInstaller.shouldSkipSweep(stamp, now, listOf("dsh-runtime.broken-1")),
+            skip(stamp, now, listOf("dsh-runtime.broken-1")),
         )
         assertTrue(
             "出现新残骸要立刻再试",
-            !DshRuntimeInstaller.shouldSkipSweep(
+            !skip(
                 stamp, now, listOf("dsh-runtime.broken-1", "dsh-runtime.broken-2"),
             ),
         )
         assertTrue(
             "窗口过了要再试",
-            !DshRuntimeInstaller.shouldSkipSweep(
+            !skip(
                 stamp, stamp.attemptedAtMs + 25 * 60 * 60 * 1000L, listOf("dsh-runtime.broken-1"),
             ),
         )
-        assertTrue("没有记录就别跳过", !DshRuntimeInstaller.shouldSkipSweep(null, now, emptyList()))
+        assertTrue("没有记录就别跳过", !skip(null, now, emptyList()))
     }
 
     @Test
     fun sweepStampRoundTripsThroughItsFileFormat() {
         val raw = "dsh-runtime.broken-111\ndsh-runtime.installing.broken-222\n1790833211587\n"
 
-        val stamp = DshRuntimeInstaller.parseSweepStamp(raw)
+        val stamp = parseSweepStamp(raw)
 
         assertEquals(
             listOf("dsh-runtime.broken-111", "dsh-runtime.installing.broken-222"),
             stamp?.names,
         )
         assertEquals(1790833211587L, stamp?.attemptedAtMs)
-        assertEquals(null, DshRuntimeInstaller.parseSweepStamp("garbage"))
+        assertEquals(null, parseSweepStamp("garbage"))
     }
 
     companion object {

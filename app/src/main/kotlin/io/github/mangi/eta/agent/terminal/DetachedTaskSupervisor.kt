@@ -65,7 +65,7 @@ internal class DetachedTaskSupervisor(
     private val releaseUserLease: (String) -> Unit = TerminalRuntime::releaseUserTask,
 ) {
     companion object {
-        const val DEFAULT_DAEMON_DIR = "/data/local/tmp/eta/daemon"
+        const val DEFAULT_DAEMON_DIR = AndroidTerminalPaths.DAEMON
         const val LINUX_DAEMON_DIR = "/workspace/daemon"
         const val MAX_TASKS = 8
         const val MAX_RETAINED_RECORDS = 32

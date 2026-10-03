@@ -41,7 +41,7 @@ internal object TerminalRuntime {
     }
 
     fun workspace(identity: String): String =
-        if (identity == "root") "/data/local/tmp/eta" else userWorkspacePath
+        if (identity == "root") AndroidTerminalPaths.BASE else userWorkspacePath
 
     fun nativeExecutable(name: String): File? = nativeLibraryDir?.let { File(it, name) }
         ?.takeIf { it.isFile && it.canExecute() }

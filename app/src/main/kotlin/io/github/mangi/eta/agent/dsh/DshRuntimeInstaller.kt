@@ -1,5 +1,8 @@
 package io.github.mangi.eta.agent.dsh
 
+import io.github.mangi.eta.core.SweepStamp
+import io.github.mangi.eta.core.parseSweepStamp
+import io.github.mangi.eta.core.shouldSkipSweep
 import android.content.Context
 import android.util.Log
 import java.io.BufferedInputStream
@@ -231,26 +234,6 @@ internal object DshRuntimeInstaller {
             ?.take(limit)
             ?: emptyList()
 
-    /**
-     * 上次 sweep 的记录：残骸名单 + 时间。
-     *
-     * 名单变了（出现新残骸）就立刻再试，否则同一批一天只试一次。
-     */
-    internal data class SweepStamp(val names: List<String>, val attemptedAtMs: Long)
-
-    internal fun parseSweepStamp(raw: String?): SweepStamp? {
-        val lines = raw?.lines()?.filter { it.isNotBlank() } ?: return null
-        val time = lines.lastOrNull()?.toLongOrNull() ?: return null
-        return SweepStamp(names = lines.dropLast(1), attemptedAtMs = time)
-    }
-
-    internal fun shouldSkipSweep(
-        stamp: SweepStamp?,
-        nowMs: Long,
-        names: List<String>,
-        windowMs: Long = SWEEP_RETRY_WINDOW_MS,
-    ): Boolean =
-        stamp != null && stamp.names == names && nowMs - stamp.attemptedAtMs in 0 until windowMs
 
     /** 把删不掉的目录改名让路（挂载点跟着改名走）；改名失败返回 null。 */
     private fun retireAside(directory: File): File? {
@@ -278,7 +261,7 @@ internal object DshRuntimeInstaller {
         val stampFile = File(directory, SWEEP_STAMP_NAME)
         val stamp = parseSweepStamp(runCatching { stampFile.readText() }.getOrNull())
         val names = victims.map { it.name }
-        if (shouldSkipSweep(stamp, System.currentTimeMillis(), names)) return
+        if (shouldSkipSweep(stamp, System.currentTimeMillis(), names, SWEEP_RETRY_WINDOW_MS)) return
         runCatching {
             stampFile.writeText(names.joinToString("\n") + "\n" + System.currentTimeMillis() + "\n")
         }
@@ -348,6 +331,16 @@ internal object DshRuntimeInstaller {
  *（`awk -F/` 数段数），嵌套时从最里层往外摘。最后有一道兜底：目标路径太浅（误传 `/`、
  * `/data`）就什么都不做。路径按 shell 规矩单引号转义；mountinfo 里的空格会写成 `\040`，
  * App 私有目录下不会出现，所以不做反转义。
+ */
+/**
+ * 提权清理脚本（su 里跑）。**与 `SafeTreeDelete.parseMountPoints` 的语义差异是刻意的**，
+ * 别照着一边改另一边：
+ *   - 转义：Kotlin 侧解码 `\040`/`\011`/`\012`/`\134`，未知转义 → fail-closed（当作有挂载）；
+ *     本脚本**不解码**（前提：目标路径不含需转义的字符，App 私有目录下成立），直接用 `readlink -f` 比对。
+ *   - 失败处理：Kotlin 侧任一行解析失败 → 当作"有挂载"（保守）；本脚本 `readlink -f` 失败 →
+ *     单独判 `ORPHAN`，不阻塞删除。
+ *   - 粒度：本脚本按挂载点**路径**比对；Kotlin 侧按调用方给的名单。
+ * 两侧行为都被各自测试钉着（`SafeTreeDeleteTest` / `test-dsh-purge.sh`），改这里先看那两份。
  */
 internal fun runtimePurgeScript(target: String): String {
     val quoted = "'" + target.replace("'", "'\\''") + "'"
