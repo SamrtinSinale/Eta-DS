@@ -15,6 +15,8 @@ class BuiltinProvidersLegacyPromptTest {
 
     private val edaDefault =
         "你是 Eda，运行在 Android 设备上的 AI 助手。你可以回答问题、与用户交流，也可以通过当前可用的工具了解设备情况并执行操作。回答使用用户的语言，简洁、直接、自然。"
+    private val hetaDefault =
+        "你是 Heta，运行在 Android 设备上的 AI 助手。你可以回答问题、与用户交流，也可以通过当前可用的工具了解设备情况并执行操作。回答使用用户的语言，简洁、直接、自然。"
     private val etaDefault =
         "你是 Eta，运行在 Android 设备上的 AI 助手。你可以回答问题、与用户交流，也可以通过当前可用的工具了解设备情况并执行操作。回答使用用户的语言，简洁、直接、自然。"
 
@@ -32,6 +34,33 @@ class BuiltinProvidersLegacyPromptTest {
             "两端空白不影响判定",
             BuiltinProviders.DEFAULT_SYSTEM_PROMPT,
             BuiltinProviders.migratedSystemPrompt("  $edaDefault\n"),
+        )
+    }
+
+    /** Heta 时代那版默认人格，现在也是"旧默认值"，要被迁移到 dsh 版。 */
+    @Test
+    fun hetaDefaultIsAlsoMigratedToTheDshOne() {
+        assertEquals(
+            BuiltinProviders.DEFAULT_SYSTEM_PROMPT,
+            BuiltinProviders.migratedSystemPrompt(hetaDefault),
+        )
+    }
+
+    /**
+     * 3.0.6.43 那版默认值（自称 "dsh 编码助手"）也要被断言。
+     *
+     * 它是**上一版**默认值、只活了一个版本、文本还是三段拼接 —— 最容易抄错，而设备上恰好有一批
+     * provider 停在它上面。只断言集合大小、不断言内容的话，抄错了测试照样全绿。
+     */
+    @Test
+    fun theDshVersionDefaultIsAlsoMigrated() {
+        val dshDefault =
+            "你是 dsh 编码助手（DeepSeek Harness），运行在 Android 设备上的 Heta 客户端中。" +
+                "用户询问你的身份时说明你是 dsh；你可以调用 Heta 提供的手机能力（设备控制、终端/Linux 环境、浏览器）完成任务。" +
+                "回答使用用户的语言，简洁、直接、自然。"
+        assertEquals(
+            BuiltinProviders.DEFAULT_SYSTEM_PROMPT,
+            BuiltinProviders.migratedSystemPrompt(dshDefault),
         )
     }
 
@@ -76,7 +105,7 @@ class BuiltinProvidersLegacyPromptTest {
      */
     @Test
     fun historyListAndDefaultsStayConsistent() {
-        assertEquals(3, BuiltinProviders.LEGACY_DEFAULT_SYSTEM_PROMPTS.size)
+        assertEquals(5, BuiltinProviders.LEGACY_DEFAULT_SYSTEM_PROMPTS.size)
         assertEquals(
             BuiltinProviders.DEFAULT_SYSTEM_PROMPT,
             BuiltinProviders.DEFAULT_SYSTEM_PROMPT_HISTORY.last(),

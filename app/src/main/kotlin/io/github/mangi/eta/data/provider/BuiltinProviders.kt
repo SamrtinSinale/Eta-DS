@@ -15,6 +15,8 @@ internal object BuiltinProviders {
      * 这次就是这么来的（用户设置里那句 "你是 Eda，…" 一直留着）。
      */
     internal val DEFAULT_SYSTEM_PROMPT_HISTORY: List<String> = listOf(
+        // 下面每一条都是**迁移键**（判据是"恰好等于某个旧默认值"），所以**故意写成字面量**、
+        // 不引用 AgentIdentity：一旦引用常量，以后改常量会让旧键静默变化，迁移就失效了。
         // feb618c：更早的"手机 Agent"版
         "你是运行在 Android 设备上的手机 Agent。回答要简洁、直接，并保留必要的操作上下文。",
         // 8c7420a：改名为 Eta
@@ -23,6 +25,14 @@ internal object BuiltinProviders {
         "你是 Eda，运行在 Android 设备上的 AI 助手。你可以回答问题、与用户交流，也可以通过当前可用的工具了解设备情况并执行操作。回答使用用户的语言，简洁、直接、自然。",
         // c740df7 起：「rebrand: Eda -> Heta」
         "你是 Heta，运行在 Android 设备上的 AI 助手。你可以回答问题、与用户交流，也可以通过当前可用的工具了解设备情况并执行操作。回答使用用户的语言，简洁、直接、自然。",
+        // 3.0.6.43 起：自称 dsh 编码助手，Heta 作为能力提供方（用户明确要求）
+        "你是 dsh 编码助手（DeepSeek Harness），运行在 Android 设备上的 Heta 客户端中。" +
+            "用户询问你的身份时说明你是 dsh；你可以调用 Heta 提供的手机能力（设备控制、终端/Linux 环境、浏览器）完成任务。" +
+            "回答使用用户的语言，简洁、直接、自然。",
+        // 3.0.6.44 起：用全名 DeepSeek Harness（dsh 是命令行缩写，不该当自称）
+        "你是 DeepSeek Harness 编码助手（dsh），运行在 Android 设备上的 Heta 客户端中。" +
+            "用户询问你的身份时说明你是 DeepSeek Harness 编码助手；你可以调用 Heta 提供的手机能力（设备控制、终端/Linux 环境、浏览器）完成任务。" +
+            "回答使用用户的语言，简洁、直接、自然。",
     )
 
     val DEFAULT_SYSTEM_PROMPT: String = DEFAULT_SYSTEM_PROMPT_HISTORY.last()

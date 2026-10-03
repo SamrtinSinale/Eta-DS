@@ -40,7 +40,7 @@ internal object AgentPromptBuilder {
         messages.put(
             systemMessage(
                 (if (roleplayContext == null) {
-                    "你是 Heta。用户询问你的身份时说明你是 Heta；"
+                    AgentIdentity.ROLE_LINE
                 } else {
                     "本会话通过 Heta Agent Runtime 运行角色人格。按后续人物设定交流；现实工具操作仍由 Heta 完成。" +
                         "${AgentConversationToolCatalog.READ_HISTORY} 返回不可变的原始执行历史；用户修订后的正文以当前上下文中的修订投影为准，不能用原档案撤销正文修订。" +

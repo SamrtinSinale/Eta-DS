@@ -4,6 +4,10 @@
 #
 # 用法：bash scripts/check-invariants.sh
 #
+# 姊妹脚本：scripts/check-cherry-pick-semantics.py —— **同步上游时**用它（抓"上游删了 import
+# 而我们还在用"这类 git 看不见的冲突）。它与本脚本一样不进 CI（语义断言会被合法重构搞过期），
+# 属于提交前按需跑的辅助。
+#
 # 为什么**不**接进 CI：它钉的是"坏写法不存在"这类语义模式（例如"别在日志里硬写 purge leftovers"），
 # 合法重构可能让它过期 —— 我们已经被过期断言坑过两次（钉住 `purgeAsRoot` 的确切写法，下一轮重构
 # 就失效）。所以它是给人/agent 在提交前跑的辅助；CI 那边装的是两个**判定保守**的静态检查
@@ -63,6 +67,16 @@ echo "=== 就绪判据 ==="
 check "expectedBaseVersion 转发" 1 "$(grep -c 'rootfsReady(rootfs.absolutePath, expectedBaseVersion)' $terminal/DebianEnvironmentInstaller.kt)"
 check "DEFAULT_SYSTEM_PROMPT 只声明一次" 1 "$(grep -rc '^    val DEFAULT_SYSTEM_PROMPT:' app/src/main --include='*.kt' | awk -F: '{s+=$2} END {print s+0}')"
 check "const DEFAULT_SYSTEM_PROMPT 残留" 0 "$(grep -rc 'const val DEFAULT_SYSTEM_PROMPT' app/src/main --include='*.kt' | awk -F: '{s+=$2} END {print s+0}')"
+
+echo "=== 身份文案只有一处声明 ==="
+check "ROLE_NAME 声明处" 1 "$(grep -rc 'const val ROLE_NAME = ' app/src/main/kotlin --include='*.kt' | awk -F: '{s+=$2} END {print s+0}')"
+check "两条活路径都引用 AgentIdentity" 2 "$(grep -rc 'AgentIdentity.ROLE_LINE' app/src/main/kotlin --include='*.kt' | awk -F: '{s+=$2} END {print s+0}')"
+# 这句旧身份文本**必须**留在 BuiltinProviders 的历史列表里（它是迁移键），
+# 所以判据是「除它之外没有别处」，不能写成「全文 0 处」—— 第一版就是这么写错的。
+check "旧身份句只作为迁移键出现" 0 "$(
+  grep -rc '说明你是 dsh' app/src/main/kotlin --include='*.kt' \
+    | grep -v 'BuiltinProviders.kt' | awk -F: '{s+=$2} END {print s+0}'
+)"
 
 echo "=== 死代码 ==="
 check "canResume 不再比较 providerRoute" 0 "$(grep 'state.providerRoute != providerRoute' $dsh/DshAcpSessionStore.kt | grep -vc '^ *//')"

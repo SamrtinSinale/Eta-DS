@@ -1,5 +1,6 @@
 package io.github.mangi.eta.agent.dsh
 
+import io.github.mangi.eta.agent.model.AgentIdentity
 import android.content.Context
 import android.util.Log
 import io.github.mangi.eta.agent.mcp.AgentToolServerHost
@@ -84,7 +85,7 @@ internal data class DshRuntimeConfig(
                     // 就等于把 dsh 自带的那个键一并抹掉。所以 personaPrefix 必须写回来。
                     append("    personaPrefix: ").append(JSONObject.quote(PERSONA_PREFIX)).append('\n')
                     append("    personaSuffix: |\n")
-                    skillPromptLines().forEach { line -> append("      ").append(line).append('\n') }
+                    personaSuffixLines().forEach { line -> append("      ").append(line).append('\n') }
                 }
             )
             OVERLAY_IN_ROOT
@@ -281,8 +282,13 @@ internal data class DshRuntimeConfig(
      * dsh 的 system prompt 后缀：每次运行都重新生成，把当前技能库索引交给它。
      * 装完新技能下一轮自动出现在这里，不需要重启或手动同步。
      */
-    private fun skillPromptLines(): List<String> {
+    private fun personaSuffixLines(): List<String> {
         val lines = ArrayList<String>()
+        // 身份写进**运行时**的 system prompt 后缀，而不是只靠 provider 里那份提示词：
+        // 后缀每次运行都会重建，所以下一次对话就生效，不依赖 provider 的文本有没有被迁移。
+        // 文案取自 AgentIdentity —— 两条活路径共用一份，避免措辞漂移。
+        lines += AgentIdentity.ROLE_LINE
+        lines += ""
         lines += "Your working directory is {{cwd}}."
         lines += ""
         lines += "技能库：dsh 自带技能在 /root/.dsh/skills；Heta 技能库在 $SKILLS_IN_ROOT（每个技能是 <名字>/SKILL.md，由 Heta App 管理）。"

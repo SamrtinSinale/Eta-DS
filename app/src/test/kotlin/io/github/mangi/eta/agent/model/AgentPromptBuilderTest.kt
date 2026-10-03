@@ -25,7 +25,7 @@ class AgentPromptBuilderTest {
                 )
 
                 val identity = messages.systemContents().single { it.contains("当前配置的模型：") }
-                assertTrue(identity.contains("你是 Heta"))
+                assertTrue(identity.contains("你是 DeepSeek Harness 编码助手"))
                 assertTrue(identity.contains("当前配置的模型：\"$modelId\""))
                 assertFalse(identity.contains(config.modelDisplayName))
                 if (modelId != config.model) assertFalse(identity.contains(config.model))

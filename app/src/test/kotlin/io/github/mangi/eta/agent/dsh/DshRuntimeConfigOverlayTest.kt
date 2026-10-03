@@ -60,6 +60,10 @@ class DshRuntimeConfigOverlayTest {
             overlay.contains("personaPrefix: \"You are a coding agent powered by the {{model}} model.\""),
         )
         assertTrue("personaSuffix 没了：\n$overlay", overlay.contains("personaSuffix: |"))
+        assertTrue(
+            "身份没进 suffix：\n$overlay",
+            overlay.contains("DeepSeek Harness 编码助手"),
+        )
         assertTrue("工作目录一行应该还在后缀里：\n$overlay", overlay.contains("Your working directory is {{cwd}}."))
     }
 
