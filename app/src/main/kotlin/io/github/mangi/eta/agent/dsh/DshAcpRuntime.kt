@@ -12,7 +12,6 @@ import io.github.mangi.eta.agent.runtime.AgentRuntimeSession
 import io.github.mangi.eta.agent.runtime.AgentRuntimeWire
 import io.github.mangi.eta.agent.runtime.AgentTokenUsage
 import io.github.mangi.eta.core.safeLogType
-import java.io.File
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
@@ -74,7 +73,6 @@ internal class DshAcpRuntime(
         // ACP 是流式的：正文与思考要自己累积，收尾时随结果一起交回，否则 UI 只有增量没有终态。
         val assistantText = StringBuilder()
         val assistantThinking = StringBuilder()
-        var sawFailure = false
         // dsh 的流是「思考块 / 正文块 / 工具调用」交替出现的，每个块必须占一个独立的 index：
         // 一直复用同一个 index 会把工具调用之后的正文合并回之前那条消息，顺序和内容都会乱。
         var blockIndex = -1
@@ -261,7 +259,12 @@ internal class DshAcpRuntime(
                             cwd = config.workingDirectory,
                             mcpServers = config.mcpServers(),
                         )
-                    }.onFailure { Log.w(TAG, "resume $id failed: ${it.safeLogType()}") }.getOrNull()
+                    }.onFailure {
+                        // resume 失败意味着 dsh 侧那份没了（运行时重装会连 DSH_HOME 一起清）。
+                        // 死映射留着只会每轮白试一次 resume，清掉——下一轮按"新会话 + 历史摘要"走。
+                        sessionStore?.remove(sessionKey)
+                        Log.w(TAG, "resume $id failed: ${it.safeLogType()}")
+                    }.getOrNull()
                 }
                 val dshSessionId = resumedId ?: client.newSession(
                     cwd = config.workingDirectory,
@@ -321,7 +324,6 @@ internal class DshAcpRuntime(
             true
         } catch (throwable: Throwable) {
             Log.w(TAG, "dsh run failed", throwable)
-            sawFailure = true
             val reason = if (session.controller.isCancelled) "已停止"
             else throwable.message ?: throwable.javaClass.simpleName
             val partial = runCatching { transcript.build() }.getOrDefault(emptyList())
@@ -499,7 +501,6 @@ internal class DshAcpRuntime(
         private const val PROMPT_ATTEMPTS = 4
         private const val RETRY_DELAY_MS = 2_000L
         private val RETRYABLE_MARKERS = listOf("API request", "超时（", "Connection", "ECONNRESET", "socket")
-        private const val DSH_ENTRY_RELATIVE = "usr/local/lib/node_modules/@deepseek-ai/dsh/lib/bin.js"
         private const val OFFICIAL_ROUTE = "deepseek-official"
         private const val BASE64_SUFFIX = ";base64"
         private const val DATA_URL_PREFIX = "data:"
@@ -627,8 +628,10 @@ internal class DshAcpRuntime(
         }
 
         /**
-         * Linux 环境里已经装好 dsh 时才启用 ACP 内核；否则返回 null 让上游回退到原有 Agent Loop。
-         * 这样没装环境、或环境损坏的设备不会因此失去原有能力。
+         * 随包运行时已展开且模型配置完整时才返回内核；返回 null 表示内核不可用。
+         *
+         * 对话回合只有这一个内核，上层不会回退（见 [unavailableReason] 与
+         * `AgentRuntimeService.executeRun`），null 会让本次执行直接失败而不是降级。
          */
         fun create(context: Context, request: AgentRuntimeWire.RunRequest): DshAcpRuntime? {
             val modelConfig = request.config

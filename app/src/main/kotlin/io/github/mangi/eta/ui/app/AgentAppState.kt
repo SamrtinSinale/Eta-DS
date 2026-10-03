@@ -2359,9 +2359,6 @@ internal class AgentAppState(
     private fun assistantMessagePrefix(runId: String): String =
         "assistant-$runId-"
 
-    private fun assistantFallbackMessageId(runId: String): String =
-        "${assistantMessagePrefix(runId)}1"
-
     private fun isAssistantMessageForRound(messageId: String, runId: String, round: Int): Boolean {
         val legacyId = "${assistantMessagePrefix(runId)}$round"
         return messageId == legacyId || messageId.startsWith("$legacyId-")
@@ -2443,11 +2440,6 @@ internal class AgentAppState(
     }
 
     private fun conversationIdForRun(runId: String): String? = runConversationIds[runId]
-
-    private fun conversationStateForRun(runId: String): AgentChatHomeUiState {
-        val conversationId = conversationIdForRun(runId) ?: return emptyChatState(defaultThinkingEnabled)
-        return conversationsById[conversationId] ?: emptyChatState(defaultThinkingEnabled)
-    }
 
     private fun refreshConversationSummaries() {
         val summaries = conversationsById.entries

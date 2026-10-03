@@ -16,7 +16,7 @@ Heta is an AI agent designed for phones and other mobile devices. It pairs the a
 
 Heta has its own agent runtime. An agent loop coordinates model requests, tool execution, and feedback, with Skills and MCP available for extensions. **You must supply your own model-provider API key (BYOK)** to use its AI features; you choose the model and provider.
 
-Requires **Android 14 or later**. The app works across phone brands, and core features do not require root. Root and LSPosed extend system access and assistant integration where permissions and ROM compatibility allow.
+Requires **Android 14 or later**. The app works across phone brands. In-app AI chat runs through the bundled dsh core and currently requires root; unrooted devices can still configure models and use features that do not depend on chat, such as the browser, terminal, and file tools. Root and LSPosed extend system access and assistant integration where permissions and ROM compatibility allow.
 
 [Download APK](https://github.com/SamrtinSinale/Heta-dsh/releases) · [Getting started](#getting-started) · [Why I built Heta](#why-i-built-heta)
 
@@ -69,9 +69,9 @@ You can use Heta's terminal yourself or let the agent use it. Each session retai
 - **Development tools:** install Python, Node.js, SSH, APK analysis tools, and DeepSeek Harness as needed.
 - **File management:** import and export files through the private workspace, share accessible Android directories under `/workspace/mounts/` in Linux, and browse Linux files from the app.
 
-Heta itself can read projects, edit code, run commands, and verify results. For longer coding sessions on a phone, [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)'s **dsh Web** offers a web UI well suited to mobile. Continue a conversation, inspect code changes, and review execution results in your browser, with a full coding-agent workflow for vibe coding wherever you are.
+Heta runs [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) itself as the chat core. The APK bundles `@deepseek-ai/dsh`, Node, and the glibc set it needs, extracted into app-private storage on first launch, so no Linux distribution, Node install, or npm package is required. The app only implements the ACP integration and the UI; history, skills, and phone tools are all driven by that core. See [Agent Runtime](docs/AGENT_RUNTIME.md).
 
-After installing Linux, Node.js, and DeepSeek Harness in Heta, launch dsh Web from the home screen or run `dsh web` in the terminal. dsh has its own model configuration and sessions, so it requires separate setup. You can return to a running instance after leaving the page, or stop it from Heta.
+The bundled core runs through `su -c` + chroot, so chat requires root. It ships the ACP profile only, without dsh's own Web UI. For `dsh web` in a browser, install Linux, Node.js, and DeepSeek Harness (the npm copy) under Development tools, then run `dsh --profile web --no-open` in the terminal. That npm copy keeps its own model configuration and sessions.
 
 ## Models and BYOK
 
@@ -105,11 +105,11 @@ System tools, sensitive reads, sensitive actions, terminal and file access, brow
 
 ## Getting started
 
-1. Download the APK from [Releases](https://github.com/SamrtinSinale/Heta-dsh/releases). After installation, open **Model provider** in Settings, enter your API key, and select a model. Task execution requires tool calling; interpreting images also requires image input support.
+1. Download the APK from [Releases](https://github.com/SamrtinSinale/Heta-dsh/releases). After installation, open **Model provider** in Settings, enter your API key, and select a model. In-app chat currently requires a rooted device with `su` permission. Task execution requires tool calling; interpreting images also requires image input support.
 2. Enable the tools and permissions you need. GUI control requires Heta's accessibility service. Notification access and usage access are granted separately; location tools require **Allow all the time**. The tools page shows what is available on your device.
 3. Start a conversation. For Linux, install a distribution, base tools, and any development tools you need under **Linux tool environment**. For assistant integration, see [System assistant entry points](#system-assistant-entry-points).
 
-- **Unrooted devices:** Android 14+ supports chat, browsing, memory, Skills, MCP, the ordinary terminal, and a private workspace. GUI control and personal data access need their respective permissions. Linux is available on supported 64-bit devices.
+- **Unrooted devices:** Android 14+ supports the built-in browser, the ordinary terminal, and a private workspace, and lets you manage models, memory, Skills, and MCP. In-app chat requires root. GUI control and personal data access need their respective permissions. Linux is available on supported 64-bit devices.
 - **Rooted devices:** gain access to protected system settings, app management, privileged files, dedicated personal-data searches, root shells, and chroot.
 - **LSPosed with a compatible ROM:** adds OEM assistant integration, system shortcuts, and Google feature enablement. Some features also require root.
 

@@ -13,7 +13,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ShortText
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.rounded.AddComment
-import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Inventory2
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Terminal

@@ -35,7 +35,6 @@ import io.github.mangi.eta.data.model.McpServerSetting
 import io.github.mangi.eta.data.model.McpToolDefinition
 import io.github.mangi.eta.data.repository.McpServerRepository
 import io.github.mangi.eta.ui.components.EtaArrowPreference
-import io.github.mangi.eta.ui.components.EtaCard
 import io.github.mangi.eta.ui.components.EtaPreference
 import io.github.mangi.eta.ui.components.EtaPreferenceDivider
 import io.github.mangi.eta.ui.components.EtaPreferenceGroup

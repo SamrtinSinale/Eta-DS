@@ -97,8 +97,6 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 // Miuix 未提供语义 success 色，沿用项目既有值；失败色走主题 error
 private val SuccessColor = Color(0xFF34C759)
 
-private const val SupplementExitDelayMs = 380L
-
 @Composable
 private fun phaseAccent(phase: AgentOverlayPhase): Color = when (phase) {
     AgentOverlayPhase.RUNNING -> MiuixTheme.colorScheme.primary

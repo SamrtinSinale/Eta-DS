@@ -1,0 +1,74 @@
+package io.github.mangi.eta.agent.dsh
+
+import java.io.File
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * 安装器清空运行时目录时用的 root 脚本。
+ *
+ * 回归背景：这里以前只是一句 `su -c rm -rf`。可运行时目录是**挂载宿主**（`/dev`、`/proc`、
+ * 技能库都挂在这个目录里），挂载点还在时 `rm -rf` 删不干净，App 却毫不知情，接着往脏目录里
+ * 解包，最后表现为永远"未就绪"。所以脚本必须：先摘挂载 → 再删 → 最后验一遍删干净。
+ */
+class DshRuntimeInstallerPurgeTest {
+
+    @Test
+    fun purgeScriptCanonicalisesPathsAndVerifiesBeforeDeletingAnything() {
+        val script = runtimePurgeScript("/data/user/0/io.sartin.eats/files/dsh-runtime")
+
+        // /data/user/0 是指向 /data/data 的符号链接，内核把挂载点记成解析后的路径。
+        // 不规范化就匹配不到 dev / proc / 技能库这些真实挂载 —— rm -rf 会穿过它们删宿主。
+        assertTrue("没有规范化路径：$script", script.contains("readlink -f"))
+
+        // 关键顺序：先确认挂载摘干净，再删。删完才报错 = 先损坏再报错。
+        val abort = script.indexOf("HETA_PURGE_ABORT")
+        val remove = script.indexOf("rm -rf")
+        assertTrue("没有删除前的挂载确认：$script", abort >= 0)
+        assertTrue("没有删除动作：$script", remove >= 0)
+        assertTrue("确认放在 rm -rf 之后了：$script", abort < remove)
+
+        // 嵌套挂载按层数从深到浅摘，不是字典序。
+        assertTrue("没按深度排序：$script", script.contains("awk -F/ '{print NF,"))
+        // 兜底：路径太浅（误传 / 或 /data）时什么都不做。
+        assertTrue("没有路径深度兜底：$script", script.contains("/*/*/*/*"))
+        assertTrue("没先 umount：$script", script.contains("umount -l"))
+        assertTrue("没扫 mountinfo：$script", script.contains("/proc/self/mountinfo"))
+        assertTrue("没删目录：$script", script.contains("rm -rf"))
+        assertTrue("删完没校验：$script", script.contains("HETA_PURGE_INCOMPLETE"))
+        assertTrue("校验失败没退非 0：$script", script.contains("exit 1"))
+    }
+
+    @Test
+    fun purgeScriptQuotesTheTargetPath() {
+        val script = runtimePurgeScript("/data/user/0/it's/files/dsh-runtime")
+
+        assertTrue("路径没按 shell 规矩转义：$script", script.contains("it'\\''s"))
+    }
+
+    /**
+     * 把当前实现生成的脚本写到 `build/dsh-purge-script.sh`，交给
+     * `scripts/test-dsh-purge.sh` 在 CI 里做**行为**验证：真造出「符号链接前缀 + bind 挂载」，
+     * 真跑脚本，断言挂载源里的数据没被 `rm -rf` 穿过删掉。
+     *
+     * 单测自己造不了挂载，所以这里只负责把脚本文本落盘；目标路径用占位符，shell 测试再替换成
+     * 它自己的临时目录。这样脚本只有一份真相（Kotlin），行为测试用的是它真实的输出。
+     */
+    @Test
+    fun writesTheGeneratedScriptForTheShellBehaviourTest() {
+        val file = File("build/dsh-purge-script.sh")
+        file.parentFile?.mkdirs()
+        file.writeText(runtimePurgeScript(BEHAVIOUR_TEST_TARGET))
+
+        assertTrue("脚本没写出来：${file.absolutePath}", file.length() > 0)
+        assertTrue(
+            "生成的脚本里应当带占位目标（shell 测试要替换它）",
+            file.readText().contains(BEHAVIOUR_TEST_TARGET),
+        )
+    }
+
+    companion object {
+        /** 供 shell 行为测试替换的占位目标；层数要够，别被浅路径兜底拦下。 */
+        const val BEHAVIOUR_TEST_TARGET = "/dsh-purge-placeholder-4f3a/data/files/dsh-runtime"
+    }
+}

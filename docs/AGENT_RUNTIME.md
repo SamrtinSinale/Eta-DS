@@ -17,6 +17,16 @@ Heta 的 Agent Runtime 负责把一次用户输入组织为模型回合、工具
 - `AgentRuntimeService`：Android 生命周期、入口 IPC 和浮层宿主；不再内联 Agent 执行循环。
 - `ShellProcessSupervisor`：Android/Alpine/Debian Shell 进程的接纳、独立进程组、取消和回收；终端协议不承担进程所有权细节。
 
+## 随包 dsh 内核
+
+对话回合直接运行上游 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 本体，而不是复刻一套循环：
+
+- **运行时**：`app/src/main/assets/dsh-runtime.tar.xz`（47.5 MB 压缩、约 278 MB 展开）内含 `@deepseek-ai/dsh 0.2.0-rc.2`、arm64 Node 二进制、所需 glibc 集合和 ACP 依赖树（158 个 `@deepseek-ai/*` 依赖包；CLI 包本身位于 `opt/dsh`）。`DshRuntimeInstaller` 在首次启动时展开到应用私有目录，用户不必安装发行版、Node 或 npm 包。
+- **协议**：`DshAcpClient` 走 stdio JSON-RPC 的 ACP——`initialize`、`session/new`、`session/prompt`、`session/update` 流（正文、思考、工具调用与结果、用量）、`session/cancel`、`session/request_permission`、`session/set_config_option`、`session/resume`；`DshAcpSessionStore` 记录会话 id 与历史指纹，只有指纹命中才续接。
+- **启动方式**：`su -c` 包一层 `exec chroot <运行时> /opt/node/bin/node /opt/dsh/lib/bin.js --profile acp --patch <覆盖层>`。凭据用 `export` 进环境而不进 argv；覆盖层写入 provider、模型、persona 和模型目录（自定义模型必须显式声明 `inputModalities: [text, image]`，否则 ACP 不广播图片能力）。因为依赖 chroot，**对话需要设备已 Root**。
+- **双向集成**：App 把技能目录 bind 到 `/root/.agents/skills`，把 Heta 的工具目录以 MCP server `heta`（HTTP + Bearer）声明给内核，模型发出的工具调用仍在 App 侧做权限检查。
+- **裁剪**：只带 `dsh-base` 与 `dsh-acp-app` 两个 bundle，39 个 `dsh-client-ui-*` 与 dsh 自带 Web UI 有意排除。`scripts/build-dsh-runtime.py [--check]` 负责补包重打包与校验依赖闭包，Release 构建前会跑一次 `--check`。
+
 ## Loop 语义
 
 一个 turn 是“一次 assistant 响应 + 该响应提交的完整工具批次”。循环遵守以下顺序：
@@ -139,7 +149,7 @@ APK 分析在 Alpine 与 Debian 中都作为可选档案显示。JADX、Apktool�
 
 `AgentExecutionService` 使用 `specialUse` 前台类型，为当前 Agent 运行、普通终端和 PRoot 后台进程持有任务引用。用户退出页面只断开 UI；最后一个任务结束时服务释放，通知中的停止操作回收它实际持有的任务。普通后台任务保持宿主 tracer 与输出读取，不能像 Root daemon 那样脱离 App 生命周期。Root daemon 保持原有独立生命周期，普通任务清理不会批量停止 Root daemon。Root 用户的原有 Runtime 绑定链路在新增前台服务启动受限时仍可继续，不因新增服务阻断厂商助手入口。
 
-dsh Web 使用 `dsh --profile web --no-open`，按发行版及后端复用活跃实例。启动失败或取消只清理本次新建的进程；复用实例保留。服务使用 `START_NOT_STICKY`，系统强停或重启后不自动重放命令。通知授权被拒绝不会直接阻止合法前台启动，但系统后台启动限制与厂商进程回收策略仍然生效。
+Heta 不再内置 dsh Web 的启停入口；需要 Web UI 时在终端自行运行 `dsh --profile web --no-open`，按普通终端任务计生命周期。执行服务使用 `START_NOT_STICKY`，系统强停或重启后不自动重放命令。通知授权被拒绝不会直接阻止合法前台启动，但系统后台启动限制与厂商进程回收策略仍然生效。
 
 ## 上下文与续接
 

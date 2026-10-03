@@ -31,7 +31,6 @@ import io.github.mangi.eta.R
 import io.github.mangi.eta.ui.app.WorkspaceEntry
 import io.github.mangi.eta.ui.app.WorkspaceFileStore
 import io.github.mangi.eta.ui.components.EtaArrowPreference
-import io.github.mangi.eta.ui.components.EtaCard
 import io.github.mangi.eta.ui.components.EtaPreference
 import io.github.mangi.eta.ui.components.EtaPreferenceColors
 import io.github.mangi.eta.ui.components.EtaPreferenceDivider

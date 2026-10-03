@@ -6,7 +6,6 @@ import io.github.mangi.eta.data.db.EtaDatabase
 import io.github.mangi.eta.data.db.SkillRegistryEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
-import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.nio.file.Files

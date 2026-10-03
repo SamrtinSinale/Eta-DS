@@ -37,10 +37,19 @@ internal data class DshRuntimeConfig(
      */
     val processDirectory: String = File(rootfsPath, "workspace").absolutePath
 
+    /**
+     * 传给子进程的环境。
+     *
+     * App 进程的环境会整份继承下去，所以任何宿主路径都会漏进 chroot。`TMPDIR` 是踩过的
+     * 那个：Android 侧它是 `/data/user/0/<包名>/cache`，在 chroot 里不存在，于是 dsh 的
+     * spill 目录（`mkdtempSync(join(tmpdir(), "dsh-spill-"))`）建不出来，只留一句
+     * "did not activate" 的警告，大段工具输出就没地方溢写了。这里钉成 chroot 内的 /tmp。
+     */
     fun environment(): Map<String, String> = buildMap {
         put("HOME", DshRuntimeInstaller.HOME_IN_ROOT)
         put("PATH", PATH_IN_ROOT)
         put("LANG", "C.UTF-8")
+        put("TMPDIR", TMP_IN_ROOT)
     }
 
     /**
@@ -88,27 +97,52 @@ internal data class DshRuntimeConfig(
     /**
      * 生成 `llm-deepseek` 的模型目录覆盖。
      *
-     * `config.models` 是**整表替换**而不是追加，所以内置的四项必须原样抄一遍，
-     * 否则用户在 dsh 侧就只剩一个模型可选。内置项里两个带 `inputModalities: [text, image]`，
-     * 保持它们原本的能力声明；然后按需把用户配置的模型补进去并声明图片输入。
+     * `config.models` 是**整表替换**而不是追加，所以随包 dsh 的默认目录必须完整带上，
+     * 否则用户在 dsh 侧就只剩一个模型可选。目录由 `scripts/build-dsh-runtime.py`
+     * 从实际随包运行时生成，升级 dsh 时 `--check` 会阻止它再次漂移。
+     *
+     * 目录常量是 `trimIndent()` 的产物，**结尾没有换行**：直接 `append` 会把后面那一段
+     * 粘到 `contextWindow: 1000000` 同一行上——
+     *
+     *     contextWindow: 1000000      - id: "global:deepseek-v4.1-flash"
+     *
+     * dsh 用 js-yaml 解析这份覆盖层，于是它在 `initialize` 回包之前就抛
+     * `YAMLException: bad indentation of a mapping entry` 退出，Heta 侧只看到
+     * `protocol-eof`。所以先 `trimEnd()` 再补一个换行：常量有没有尾换行都成立。
      */
     private fun modelCatalogOverlay(): String = buildString {
         append("- id: llm-deepseek\n")
         append("  config:\n")
         append("    models:\n")
-        append(BUILTIN_MODEL_CATALOG)
-        if (BUILTIN_MODEL_IDS.none { it == model }) {
+        append(DshBuiltinModelCatalog.YAML.trimEnd()).append('\n')
+        if (DshBuiltinModelCatalog.IDS.none { it == model }) {
             append("      - id: ").append(JSONObject.quote(model)).append('\n')
             append("        contextWindow: ").append(DEFAULT_CONTEXT_WINDOW).append('\n')
             append("        inputModalities: [text, image]\n")
+            // 省略等于"不声明"：dsh 侧只有拿到这两个键才会对已存在的会话做 system prompt
+            // 与工具定义的增量更新（dsh-llm-deepseek：systemPromptUpdate === "in-history"、
+            // toolUpdate ∈ {in-history, addition-only}，两者都只在"有值"时才透传）。
+            // 内置目录里的 flash 两项都带，自定义模型没有理由是纯文本语义，照抄。
+            append("        systemPromptUpdate: in-history\n")
+            append("        toolUpdate: addition-only\n")
         }
     }
 
-    /** su 是 Eta 既有提权路径；脚本里的 export 保证凭据不落进 argv。 */
+    /**
+     * su 是 Eta 既有提权路径。
+     *
+     * 凭据**不写进这条脚本**：`su -c <script>` 的整段脚本就是 argv，`ps` 里直接可读
+     * （任何当时跑着的 root 进程都能看见，包括 dsh 自己的终端）。所以凭据落在 rootfs 内的
+     * 0600 文件里，脚本只 `source` 它——argv 里只剩一个文件路径。
+     *
+     * 注意 source 用的是**宿主路径**：这一步在 `exec chroot` 之前由宿主的 sh 执行，
+     * 那时候 `/opt/dsh/...` 还不存在（它只在 chroot 里成立）。
+     */
     fun command(): List<String> = listOf(SU, "-c", rootScript())
 
     private fun rootScript(): String {
         val overlay = writeProfileOverlay()
+        val credentials = writeCredentialEnv()
         return buildString {
             append("export HOME=").append(DshRuntimeInstaller.HOME_IN_ROOT)
             append(" PATH=").append(PATH_IN_ROOT)
@@ -116,9 +150,26 @@ internal data class DshRuntimeConfig(
             // dsh 的审批策略由 DSH_PERMISSION_MODE 决定：danger-full-access => policy=never，
             // 即不再向客户端要审批（Eta 侧没有审批 UI，也不打算有）。
             append(" DSH_PERMISSION_MODE=").append(PERMISSION_MODE)
-            if (apiKey.isNotBlank()) append(" DEEPSEEK_API_KEY=").append(shellQuote(apiKey))
-            if (baseUrl.isNotBlank()) append(" DEEPSEEK_BASE_URL=").append(shellQuote(baseUrl))
             append("; ")
+            if (credentials != null) {
+                // set -a 让 source 进来的变量全部导出（进了环境，exec 之后由 node 继承），
+                // 然后立刻删掉文件：凭据不再以文件形式留在 chroot 里，只有进程 environ 里有
+                // ——那是 dsh 工作必须的，去不掉。
+                append("set -a; . ").append(shellQuote(credentials)).append("; set +a; rm -f ")
+                    .append(shellQuote(credentials)).append("; ")
+            }
+            // dsh 每会话落三样东西（实测）：sessions/<项目>/<id>/session.v4.jsonl.zstd、
+            // 同目录的 session.lock，以及 storages/session_projcache/sessions/<id>.json
+            //（投影缓存，比会话本体大一个数量级）。dsh 从不回收它们，App 侧那份映射表有 128
+            // 条上限、dsh 侧没有对应物。只删两周前的文件，碰不到正在续接的会话；删完再收一次
+            // 空目录（否则留下满树空壳）；失败（目录不存在等）不阻断启动。
+            for (relative in listOf(SESSIONS_RELATIVE, PROJECTION_CACHE_RELATIVE)) {
+                append("find ").append(shellQuote(File(rootfsPath, relative).absolutePath))
+                    .append(" -type f -mtime +").append(SESSION_RETENTION_DAYS)
+                    .append(" -delete 2>/dev/null; ")
+            }
+            append("find ").append(shellQuote(File(rootfsPath, SESSIONS_RELATIVE).absolutePath))
+                .append(" -type d -empty -delete 2>/dev/null; ")
             // dsh 的子进程走 node-pty，需要 /dev/ptmx 与 /dev/pts。运行时的 /dev 是空目录，
             // 不挂进去的话 bash、ripgrep 这类子进程全部起不来（ENOENT / provider failure）。
             // 挂载失败不阻断启动，只是那些工具会报错。
@@ -143,10 +194,50 @@ internal data class DshRuntimeConfig(
                     .append(" 2>/dev/null; ")
             }
             append("exec chroot ").append(shellQuote(rootfsPath))
+            // dsh 0.2 默认通过 native addon 读取 Node 内部模块。Android 上该 .node
+            // 会在 initialize 前退出；随包入口已替换为 JS shim，用 Node 自带的
+            // --expose-internals 走同一条无 native 依赖路径。
             append(' ').append(DshRuntimeInstaller.NODE_IN_ROOT)
+            append(" --expose-internals")
             append(' ').append(DshRuntimeInstaller.DSH_ENTRY_IN_ROOT)
             append(" --profile ").append(ACP_PROFILE)
             if (overlay != null) append(" --patch ").append(shellQuote(overlay))
+        }
+    }
+
+    /**
+     * 把凭据写进 rootfs 里的 0600 脚本，返回它的**宿主**路径（source 发生在 chroot 之前）。
+     *
+     * 为什么不放进启动命令：`su -c <script>` 的脚本整体是 argv，`ps` 可见。
+     * 为什么不只依赖 ProcessBuilder 的 environment：各家 su 对调用方环境的处理不一致，
+     * 凭据传丢会变成"能启动、一请求就 401"，比这个窗口更难查。文件落在 App 私有目录里，
+     * 权限钉成 owner-only，root 之外读不到。
+     */
+    private fun writeCredentialEnv(): String? {
+        if (apiKey.isBlank() && baseUrl.isBlank()) return null
+        return runCatching {
+            val file = File(rootfsPath, CREDENTIALS_RELATIVE)
+            file.parentFile?.mkdirs()
+            file.writeText(
+                buildString {
+                    if (apiKey.isNotBlank()) {
+                        append("export ").append(ENV_API_KEY).append('=')
+                            .append(shellQuote(apiKey)).append('\n')
+                    }
+                    if (baseUrl.isNotBlank()) {
+                        append("export ").append(ENV_BASE_URL).append('=')
+                            .append(shellQuote(baseUrl)).append('\n')
+                    }
+                }
+            )
+            file.setReadable(false, false)
+            file.setReadable(true, true)
+            file.setWritable(false, false)
+            file.setWritable(true, true)
+            file.absolutePath
+        }.getOrElse { throwable ->
+            Log.w(TAG, "credential env write failed", throwable)
+            null
         }
     }
 
@@ -243,55 +334,29 @@ internal data class DshRuntimeConfig(
         private const val PATH_IN_ROOT =
             "/system/bin:/system/xbin:/product/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
         private const val ENV_API_KEY = "DEEPSEEK_API_KEY"
+        private const val TMP_IN_ROOT = "/tmp"
         private const val ENV_BASE_URL = "DEEPSEEK_BASE_URL"
         private const val MCP_SERVER_NAME = "heta"
         private const val MCP_TRANSPORT_HTTP = "http"
         private const val OVERLAY_RELATIVE = "opt/dsh/heta-run-overlay.patch.yml"
         private const val OVERLAY_IN_ROOT = "/opt/dsh/heta-run-overlay.patch.yml"
+        private const val CREDENTIALS_RELATIVE = "opt/dsh/heta-run-env.sh"
+        /** dsh 自己的会话目录；App 侧那份有 128 条上限，这份没有，只能按年龄清。 */
+        private const val SESSIONS_RELATIVE = "root/.dsh/sessions"
+        /** dsh 的会话投影缓存，和会话目录一起长，且比会话本体大得多。 */
+        private const val PROJECTION_CACHE_RELATIVE = "root/.dsh/storages/session_projcache"
+        private const val SESSION_RETENTION_DAYS = 14
         private const val SKILLS_TARGET_REL = "root/.agents/skills"
         private const val SKILLS_IN_ROOT = "/root/.agents/skills"
         private const val MAX_SKILL_LINES = 40
         private const val MAX_SKILL_DESCRIPTION = 160
 
-        /** dsh 内置模型目录的窗口大小（`DEFAULT_CONTEXT_WINDOW` 在 dsh 侧也是 1e6）。 */
+        /** 自定义网关模型的目录窗口大小；随包默认目录由生成文件维护。 */
         private const val DEFAULT_CONTEXT_WINDOW = 1_000_000
 
         /**
-         * dsh 内置的 `deepseek-official` 模型目录，逐项抄自
-         * `@deepseek-ai/dsh-llm-deepseek` 的 `DEFAULT_MODELS`。
-         *
-         * 必须整份重写：`config.models` 是整表替换，只写自己那一项会把内置模型全挤掉。
-         * dsh 升级换了目录时这里会滞后，但滞后只影响"目录里多/少一个可选模型"，
-         * 不影响用户自己那个模型的图片能力声明。
-         */
-        private val BUILTIN_MODEL_CATALOG = """
-            |      - id: "deepseek-flash"
-            |        name: "DeepSeek-V41-Flash"
-            |        contextWindow: 1000000
-            |        inputModalities: [text, image]
-            |      - id: "deepseek-v4-flash"
-            |        name: "DeepSeek-V4-Flash"
-            |        contextWindow: 1000000
-            |      - id: "deepseek-v4-pro"
-            |        name: "DeepSeek-V4-Pro"
-            |        contextWindow: 1000000
-            |      - id: "deepseek-v4-flash-vision-exp"
-            |        name: "DeepSeek-V4-Flash-Vision-Exp"
-            |        contextWindow: 1000000
-            |        inputModalities: [text, image]
-            |
-        """.trimMargin()
-
-        private val BUILTIN_MODEL_IDS = listOf(
-            "deepseek-flash",
-            "deepseek-v4-flash",
-            "deepseek-v4-pro",
-            "deepseek-v4-flash-vision-exp",
-        )
-
-        /**
-         * 内置运行时尚未展开时返回 null，让上游回退到原有 Agent Loop。
-         * 这样首次启动还没展开完成的那几秒不会导致对话失败。
+         * 内置运行时尚未展开时返回 null；调用方会给出明确原因并结束本次执行，
+         * 不会回退到旧内核。
          */
         fun resolveBuiltin(
             context: Context,

@@ -305,6 +305,10 @@
   <string name="ui_eta_system_assistant_003e9b">数字助理应用</string>
   <string name="ui_lsposed_service_is_not_connected_44734d">LSPosed 服务未连接</string>
   <string name="ui_linux_tool_environment_314d22">Linux 工具环境</string>
+  <string name="settings_dsh_runtime_title">重装对话运行时</string>
+  <string name="settings_dsh_runtime_summary">清掉已解包的 dsh 运行时并重新展开（请在对话空闲时操作）</string>
+  <string name="settings_dsh_runtime_done">对话运行时已重装</string>
+  <string name="settings_dsh_runtime_failed">重装失败，请查看日志</string>
   <string name="ui_the_entire_contents_of_memory_md_will_be_deleted_and_83a8ac">MEMORY.md 的全部内容将被删除，记忆开关保持当前状态。</string>
   <string name="ui_provider_does_not_exist_83cee6">Provider 不存在</string>
   <string name="ui_search_in_one_turn_179584">一圈即搜</string>

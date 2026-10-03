@@ -1,7 +1,6 @@
 package io.github.mangi.eta.ui.preview
 
 import io.github.mangi.eta.ui.model.AgentChatHomeUiState
-import io.github.mangi.eta.ui.model.AgentChatMessageUi
 import io.github.mangi.eta.ui.model.AgentChatUiState
 import io.github.mangi.eta.ui.model.AgentToolsUiState
 import io.github.mangi.eta.ui.model.ConversationModeUi

@@ -42,7 +42,6 @@ import io.github.mangi.eta.agent.terminal.TerminalEnvironment
 import io.github.mangi.eta.agent.terminal.TerminalRuntime
 import io.github.mangi.eta.agent.terminal.runOneShotShell
 import io.github.mangi.eta.agent.terminal.shellQuote
-import io.github.mangi.eta.ui.components.EtaCard
 import io.github.mangi.eta.ui.components.EtaPreference
 import io.github.mangi.eta.ui.components.EtaPreferenceDivider
 import io.github.mangi.eta.ui.components.EtaPreferenceGroup

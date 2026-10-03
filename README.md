@@ -16,7 +16,7 @@ Heta 是为手机和移动设备设计的 AI Agent，结合了 [Codex](https://o
 
 Heta 内置 Agent Runtime，通过 Agent Loop 编排模型调用、工具执行和结果反馈，并支持 Skills 与 MCP 扩展。使用 AI 功能需要自备模型服务的 **API Key（BYOK）**，模型与服务商由你选择。
 
-支持 **Android 14 及以上版本**，App 本体不限手机品牌，基础功能无需 Root。Root 和 LSPosed 可进一步扩展系统访问与助手入口，具体能力取决于授权和 ROM 适配。
+支持 **Android 14 及以上版本**，App 本体不限手机品牌。应用内 AI 对话通过随包 dsh 内核运行，当前需要设备已 Root；普通设备仍可配置模型，并使用不依赖对话的浏览器、终端与文件等能力。Root 和 LSPosed 可进一步扩展系统访问与助手入口，具体能力取决于授权和 ROM 适配。
 
 [下载 APK](https://github.com/SamrtinSinale/Heta-dsh/releases) · [快速开始](#快速开始) · [为什么做 Heta](#为什么做-heta)
 
@@ -73,9 +73,9 @@ Heta 的终端可以由 Agent 调用，也可以由你直接操作。多个会�
 - **开发工具**：Python、Node.js、SSH、APK 分析与 DeepSeek Harness 按需安装。
 - **文件管理**：私有工作区支持导入、导出；已授权的 Android 目录可共享到 Linux 的 `/workspace/mounts/`，也可在 App 内浏览 Linux 文件。
 
-Heta 本体可以读取项目、修改代码、运行命令并验证结果。如果想在手机上持续进行编程工作，[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的 **dsh Web** 提供了更适合移动端的 Web UI，可以在浏览器中持续对话、查看代码修改与执行结果，享受完整的 Coding Agent 工作体验，随时随地 Vibe Coding。
+Heta 的对话回合直接运行 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 本体：随 APK 分发的运行时里带 `@deepseek-ai/dsh`、Node 与所需的 glibc 集合，首次启动展开到应用私有目录，不需要另装 Linux、Node.js 或 npm 包。App 侧只负责 ACP 协议对接与界面，历史、技能和手机工具都由这套内核驱动，细节见 [Agent Runtime](docs/AGENT_RUNTIME.md)。
 
-在 Heta 中安装 Linux、Node.js 与 DeepSeek Harness 后，即可从首页一键启动 dsh Web，也可以在终端运行 `dsh web`。dsh 使用独立的模型配置与会话，需在其中单独完成配置；离开页面后可返回继续使用，也可从 Heta 主动停止。
+这套内置内核经 `su -c` + chroot 运行，因此对话需要设备已 Root。它只带 dsh 的 ACP profile，不含 dsh 自带的 Web UI；想要浏览器里的 dsh Web，可以在「开发工具」里装好 Linux、Node.js 与 DeepSeek Harness（npm 版），再到终端自行运行 `dsh --profile web --no-open`。npm 版有独立的模型配置与会话，需要单独设置。
 
 ## 模型与 BYOK
 
@@ -115,11 +115,11 @@ Provider 层支持 OpenAI-compatible Chat Completions、Responses API 和 Anthro
 
 ## 快速开始
 
-1. 从 [Releases](https://github.com/SamrtinSinale/Heta-dsh/releases) 下载 APK，安装后在“模型提供商”中填写 API Key 并选择模型。执行任务需要 Tool Calling，理解图片还需模型支持图片输入。
+1. 从 [Releases](https://github.com/SamrtinSinale/Heta-dsh/releases) 下载 APK，安装后在“模型提供商”中填写 API Key 并选择模型。应用内对话目前需要设备已 Root 并允许 `su` 提权。执行任务需要 Tool Calling，理解图片还需模型支持图片输入。
 2. 按任务需要配置工具开关与权限：GUI Agent 需要无障碍服务；通知、应用使用情况分别授权；位置工具需要“始终允许”。工具页可查看当前设备的可用能力。
 3. 开始对话。需要 Linux 时，在“Linux 工具环境”中安装发行版、基础工具及所需开发工具；需要系统入口时，参见[系统助手入口](#系统助手入口)。
 
-- **普通设备**：Android 14+，可使用聊天、浏览器、记忆、Skills、MCP、普通终端与私有工作区；GUI 和本机信息读取按需授权。Linux 支持对应的 64 位设备。
+- **普通设备**：Android 14+，可使用内置浏览器、普通终端与私有工作区，并可管理模型、记忆、Skills、MCP 与设备权限；应用内对话需要 Root。GUI 和本机信息读取按需授权，Linux 支持对应的 64 位设备。
 - **Root 设备**：进一步开放系统设置修改、应用管理、受保护文件与专用个人数据检索，以及 Root Shell 和 chroot。
 - **LSPosed 与适配 ROM**：开放厂商助手接管、系统快捷入口及 Google 能力增强；部分功能另需 Root。
 

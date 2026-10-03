@@ -38,8 +38,8 @@ android {
         targetSdk = 36
         // versionCode 规则：yyyyMMdd + 两位当日序号（01 起），发版时随 versionName 一起手动递增。
         // 通过 CI 构建时可由 ETA_VERSION_NAME / ETA_VERSION_CODE 覆盖。
-        versionCode = ciVersionCode ?: 2026092801
-        versionName = ciVersionName ?: "3.0.6"
+        versionCode = ciVersionCode ?: 2026093013
+        versionName = ciVersionName ?: "3.0.6.14"
     }
 
     signingConfigs {
@@ -152,4 +152,7 @@ dependencies {
     testImplementation(libs.json)
     testImplementation(libs.room.testing)
     testImplementation(libs.robolectric)
+    // 覆盖层是手写 YAML：必须真解析一遍才挡得住"粘成一行"这类坏 YAML，
+    // 字符串 contains 断言对它是完全免疫的。
+    testImplementation(libs.snakeyaml)
 }

@@ -11,7 +11,6 @@ import io.github.mangi.eta.agent.roleplay.CharacterBookEntryDraft
 import io.github.mangi.eta.agent.roleplay.CharacterWorldbook
 import io.github.mangi.eta.ui.app.CharacterLibraryStore
 import io.github.mangi.eta.ui.components.EtaArrowPreference
-import io.github.mangi.eta.ui.components.EtaCard
 import io.github.mangi.eta.ui.components.EtaPreferenceGroup
 import io.github.mangi.eta.ui.components.EtaPreferenceGroupTitle
 import io.github.mangi.eta.ui.components.EtaSwitch

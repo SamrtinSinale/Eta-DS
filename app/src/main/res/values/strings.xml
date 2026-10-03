@@ -317,6 +317,10 @@
   <string name="ui_eta_system_assistant_003e9b">Digital assistant app</string>
   <string name="ui_lsposed_service_is_not_connected_44734d">LSPosed service is not connected</string>
   <string name="ui_linux_tool_environment_314d22">Linux tool environment</string>
+  <string name="settings_dsh_runtime_title">Reinstall chat runtime</string>
+  <string name="settings_dsh_runtime_summary">Wipe the unpacked dsh runtime and unpack it again (do this when no chat is running)</string>
+  <string name="settings_dsh_runtime_done">Chat runtime reinstalled</string>
+  <string name="settings_dsh_runtime_failed">Reinstall failed, check the log</string>
   <string name="ui_the_entire_contents_of_memory_md_will_be_deleted_and_83a8ac">The entire contents of MEMORY.md will be deleted and the memory switch will remain in its current state.</string>
   <string name="ui_provider_does_not_exist_83cee6">Provider does not exist</string>
   <string name="ui_search_in_one_turn_179584">Circle to Search</string>

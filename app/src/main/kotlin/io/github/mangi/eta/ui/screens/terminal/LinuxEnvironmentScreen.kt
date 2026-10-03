@@ -9,7 +9,6 @@ import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,10 +32,8 @@ import io.github.mangi.eta.agent.terminal.DebianEnvironmentState
 import io.github.mangi.eta.agent.terminal.DebianInstallProgress
 import io.github.mangi.eta.agent.terminal.DebianInstallResult
 import io.github.mangi.eta.agent.terminal.DebianInstallStage
-import io.github.mangi.eta.agent.terminal.DetachedTaskSupervisor
 import io.github.mangi.eta.agent.terminal.LinuxApkAnalysisInstaller
 import io.github.mangi.eta.agent.terminal.LinuxDistribution
-import io.github.mangi.eta.agent.terminal.LinuxEnvironmentPaths
 import io.github.mangi.eta.agent.terminal.LinuxExecutionBackend
 import io.github.mangi.eta.agent.terminal.LinuxPackageProfile
 import io.github.mangi.eta.agent.terminal.LinuxPackageProfileInstaller
@@ -44,15 +41,11 @@ import io.github.mangi.eta.agent.terminal.LinuxPackageProfiles
 import io.github.mangi.eta.agent.terminal.PackageProfileInstallProgress
 import io.github.mangi.eta.agent.terminal.PackageProfileInstallResult
 import io.github.mangi.eta.agent.terminal.PackageProfileInstallStage
-import io.github.mangi.eta.agent.terminal.SharedFolderMounts
-import io.github.mangi.eta.agent.terminal.terminalEnvironment
-import io.github.mangi.eta.core.AndroidAgentLogger
 import io.github.mangi.eta.data.repository.LinuxEnvironmentSettingsRepository
 import io.github.mangi.eta.ui.app.launchForegroundExecution
 import io.github.mangi.eta.ui.app.rememberDeviceCapabilities
 import io.github.mangi.eta.ui.app.rememberExecutionNotificationRequest
 import io.github.mangi.eta.ui.components.EtaArrowPreference
-import io.github.mangi.eta.ui.components.EtaCard
 import io.github.mangi.eta.ui.components.EtaPreference
 import io.github.mangi.eta.ui.components.EtaPreferenceColors
 import io.github.mangi.eta.ui.components.EtaPreferenceDivider

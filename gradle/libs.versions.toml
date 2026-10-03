@@ -22,6 +22,7 @@ room = "2.8.4"
 junit = "4.13.2"
 json = "20260522"
 robolectric = "4.16.1"
+snakeyaml = "2.4"
 commonsCompress = "1.28.0"
 xz = "1.12"
 
@@ -56,6 +57,7 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 json = { group = "org.json", name = "json", version.ref = "json" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+snakeyaml = { group = "org.yaml", name = "snakeyaml", version.ref = "snakeyaml" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

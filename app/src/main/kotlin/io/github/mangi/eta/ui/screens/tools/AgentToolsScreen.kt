@@ -25,7 +25,6 @@ import io.github.mangi.eta.R
 import io.github.mangi.eta.agent.tool.AgentToolCapabilities
 import io.github.mangi.eta.ui.app.rememberDeviceCapabilities
 import io.github.mangi.eta.ui.components.EtaArrowPreference
-import io.github.mangi.eta.ui.components.EtaCard
 import io.github.mangi.eta.ui.components.EtaPreferenceGroup
 import io.github.mangi.eta.ui.components.EtaPreferenceGroupTitle
 import io.github.mangi.eta.ui.components.MiuixScaffoldPage

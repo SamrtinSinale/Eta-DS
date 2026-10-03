@@ -212,8 +212,6 @@ internal class GoogleAppSystemizerInstaller(
                 else -> InstallPreflight.READY
             }
 
-        internal val kernelSuMetamodulePath: String
-            get() = KERNEL_SU_METAMODULE_PATH
     }
 }
 

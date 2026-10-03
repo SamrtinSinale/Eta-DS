@@ -23,6 +23,8 @@ asset is stale), which is what CI uses to notice drift.
 from __future__ import annotations
 
 import argparse
+import ast
+import difflib
 import json
 import re
 import shutil
@@ -37,6 +39,9 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 ASSET = REPO / "app" / "src" / "main" / "assets" / "dsh-runtime.tar.xz"
+
+# Bump this when the bundled runtime is upgraded. `--check` fails on drift.
+DSH_VERSION = "0.2.0-rc.2"
 
 # The runtime only ever boots one profile: `acp`, which is what the in-app chat
 # drives. dsh-base is the floor under it.
@@ -64,7 +69,6 @@ EXCLUDED = {
     "node-addon-system-darwin-x64",
     "node-addon-system-linux-x64",
     "node-addon-system-win32-x64",
-    "dsh-win32-process",
     # the application package itself — it lives at opt/dsh, not in node_modules
     "dsh",
 }
@@ -73,6 +77,28 @@ DEFAULT_REGISTRY = "https://registry.npmjs.org"
 PACKAGE_PREFIX = "@deepseek-ai/"
 SCOPE_DIR = "opt/dsh/node_modules/@deepseek-ai"
 DSH_PACKAGE_JSON = "opt/dsh/package.json"
+DEEPSEEK_LLM_INDEX = (
+    "opt/dsh/node_modules/@deepseek-ai/dsh-llm-deepseek/lib/index.js"
+)
+MODEL_CATALOG_SOURCE = (
+    REPO
+    / "app"
+    / "src"
+    / "main"
+    / "kotlin"
+    / "io"
+    / "github"
+    / "mangi"
+    / "eta"
+    / "agent"
+    / "dsh"
+    / "DshBuiltinModelCatalog.kt"
+)
+
+REQUIRE_BUILTIN_INDEX = (
+    "opt/dsh/node_modules/node-addon-require-builtin/lib/index.js"
+)
+REQUIRE_BUILTIN_SHIM_SOURCE = REPO / "scripts" / "dsh-require-builtin-shim.js"
 
 
 def log(message: str) -> None:
@@ -247,6 +273,181 @@ def repack(root: Path, asset: Path) -> None:
     staging.replace(asset)
 
 
+# --- generated model catalog -------------------------------------------------
+
+
+def decode_js_string(token: str) -> str:
+    # Decode the JSON/single-quoted string literals used in the bundled JS.
+    token = token.strip()
+    try:
+        return json.loads(token)
+    except json.JSONDecodeError:
+        return ast.literal_eval(token)
+
+
+def extract_default_models(root: Path) -> list[dict]:
+    # Read DEFAULT_MODELS from the bundled dsh package instead of copying it by hand.
+    source = (root / DEEPSEEK_LLM_INDEX).read_text(encoding="utf-8")
+    window_match = re.search(
+        r"const\s+DEFAULT_CONTEXT_WINDOW\s*=\s*([0-9]+(?:\.[0-9]+)?(?:e[+-]?[0-9]+)?)",
+        source,
+        re.IGNORECASE,
+    )
+    if not window_match:
+        raise SystemExit("无法从随包 dsh 读取 DEFAULT_CONTEXT_WINDOW")
+    default_window = float(window_match.group(1))
+    if not default_window.is_integer():
+        raise SystemExit(f"DEFAULT_CONTEXT_WINDOW 不是整数: {default_window}")
+    default_window = int(default_window)
+
+    catalog_match = re.search(
+        r"const\s+DEFAULT_MODELS\s*=\s*\[(.*?)\n\];", source, re.DOTALL
+    )
+    if not catalog_match:
+        raise SystemExit("无法从随包 dsh 读取 DEFAULT_MODELS")
+
+    entry_pattern = re.compile(
+        r"\{\s*id:\s*(\"[^\"]*\"|'[^']*')(.*?)\n\s*\}", re.DOTALL
+    )
+    entries = list(entry_pattern.finditer(catalog_match.group(1)))
+    if not entries:
+        raise SystemExit("随包 dsh 的 DEFAULT_MODELS 为空或格式无法解析")
+
+    models: list[dict] = []
+    for entry in entries:
+        model_id = decode_js_string(entry.group(1))
+        body = entry.group(2)
+
+        def string_field(name: str) -> str | None:
+            match = re.search(
+                rf"\b{name}:\s*(\"[^\"]*\"|'[^']*')", body, re.DOTALL
+            )
+            return decode_js_string(match.group(1)) if match else None
+
+        window = default_window
+        context_match = re.search(
+            r"\bcontextWindow:\s*([A-Za-z_][A-Za-z0-9_]*|[0-9]+(?:\.[0-9]+)?(?:e[+-]?[0-9]+)?)",
+            body,
+            re.IGNORECASE,
+        )
+        if context_match:
+            token = context_match.group(1)
+            if token == "DEFAULT_CONTEXT_WINDOW":
+                window = default_window
+            else:
+                numeric = float(token)
+                if not numeric.is_integer():
+                    raise SystemExit(f"模型 {model_id} 的 contextWindow 不是整数: {numeric}")
+                window = int(numeric)
+
+        modalities: list[str] = []
+        modalities_match = re.search(r"\binputModalities:\s*\[([^\]]*)\]", body)
+        if modalities_match:
+            modalities = [
+                decode_js_string(token)
+                for token in re.findall(
+                    r"\"(?:\\.|[^\"])*\"|'(?:\\.|[^'])*'",
+                    modalities_match.group(1),
+                )
+            ]
+
+        models.append(
+            {
+                "id": model_id,
+                "name": string_field("name"),
+                "description": string_field("description"),
+                "contextWindow": window,
+                "systemPromptUpdate": string_field("systemPromptUpdate"),
+                "toolUpdate": string_field("toolUpdate"),
+                "inputModalities": modalities,
+            }
+        )
+    return models
+
+
+def render_model_catalog(models: list[dict]) -> str:
+    lines: list[str] = []
+    for model in models:
+        lines.append(f'- id: {json.dumps(model["id"], ensure_ascii=False)}')
+        if model["name"] is not None:
+            lines.append(f'  name: {json.dumps(model["name"], ensure_ascii=False)}')
+        if model["description"] is not None:
+            lines.append(
+                f'  description: {json.dumps(model["description"], ensure_ascii=False)}'
+            )
+        lines.append(f'  contextWindow: {model["contextWindow"]}')
+        if model["systemPromptUpdate"] is not None:
+            lines.append(f'  systemPromptUpdate: {model["systemPromptUpdate"]}')
+        if model["toolUpdate"] is not None:
+            lines.append(f'  toolUpdate: {model["toolUpdate"]}')
+        if model["inputModalities"]:
+            modalities = ", ".join(model["inputModalities"])
+            lines.append(f'  inputModalities: [{modalities}]')
+    return "\n".join(lines) + "\n"
+
+
+def render_model_catalog_source(models: list[dict]) -> str:
+    yaml = render_model_catalog(models)
+    yaml_source = "\n".join(
+        f"        {line}" if line else "" for line in yaml.rstrip("\n").splitlines()
+    )
+    ids = "\n".join(
+        f"        {json.dumps(model['id'], ensure_ascii=False)}," for model in models
+    )
+    template = f'''package io.github.mangi.eta.agent.dsh\n\n/**\n * Generated from the bundled @deepseek-ai/dsh-llm-deepseek DEFAULT_MODELS.\n *\n * Do not edit by hand. scripts/build-dsh-runtime.py --check compares this file\n * with dsh-runtime.tar.xz and fails when they drift.\n */\ninternal object DshBuiltinModelCatalog {{\n    val IDS: List<String> = listOf(\n{ids}\n    )\n\n    val YAML: String = __Q3__\n{yaml_source}\n    __Q3__.trimIndent().prependIndent("      ")\n}}\n'''
+    return template.replace("__Q3__", '"' * 3)
+
+
+def sync_model_catalog(root: Path, check: bool) -> int:
+    models = extract_default_models(root)
+    expected = render_model_catalog_source(models)
+    actual = MODEL_CATALOG_SOURCE.read_text(encoding="utf-8") if MODEL_CATALOG_SOURCE.is_file() else ""
+    if actual == expected:
+        log(f"模型目录已同步: {MODEL_CATALOG_SOURCE.relative_to(REPO)}")
+        return 0
+
+    if check:
+        log("随包 dsh 的 DEFAULT_MODELS 与 Heta 覆盖层漂移:")
+        diff = difflib.unified_diff(
+            actual.splitlines(),
+            expected.splitlines(),
+            fromfile=str(MODEL_CATALOG_SOURCE),
+            tofile="dsh-runtime.tar.xz",
+            lineterm="",
+        )
+        for line in diff:
+            log(f"  {line}")
+        log("请运行 python3 scripts/build-dsh-runtime.py 重新生成目录。")
+        return 1
+
+    MODEL_CATALOG_SOURCE.parent.mkdir(parents=True, exist_ok=True)
+    MODEL_CATALOG_SOURCE.write_text(expected, encoding="utf-8")
+    log(f"已生成模型目录: {MODEL_CATALOG_SOURCE.relative_to(REPO)}")
+    return 0
+
+
+def sync_require_builtin_shim(root: Path, check: bool) -> bool:
+    """Replace dsh's native builtin-access addon with the audited JS shim."""
+    path = root / REQUIRE_BUILTIN_INDEX
+    if not path.is_file():
+        raise SystemExit(f"随包运行时缺少 {REQUIRE_BUILTIN_INDEX}")
+
+    expected = REQUIRE_BUILTIN_SHIM_SOURCE.read_text(encoding="utf-8")
+    actual = path.read_text(encoding="utf-8")
+    if actual == expected:
+        log("native builtin addon 已替换为 --expose-internals JS 旁路")
+        return False
+
+    if check:
+        log("随包 dsh 仍依赖 Android 上不稳定的 native builtin addon:")
+        log(f"  需要更新 {REQUIRE_BUILTIN_INDEX}")
+        raise SystemExit(1)
+
+    path.write_text(expected, encoding="utf-8")
+    log("已替换 native builtin addon 为 --expose-internals JS 旁路")
+    return True
+
+
 # --- entry point ------------------------------------------------------------
 
 
@@ -271,6 +472,15 @@ def main() -> int:
 
         version = json.loads((root / DSH_PACKAGE_JSON).read_text())["version"]
         log(f"运行时 dsh 版本: {version}")
+        if version != DSH_VERSION:
+            raise SystemExit(
+                f"运行时 dsh 版本为 {version}，期望 {DSH_VERSION}；请先升级随包运行时"
+            )
+
+        if sync_model_catalog(root, args.check) != 0:
+            return 1
+
+        shim_changed = sync_require_builtin_shim(root, args.check)
 
         for bundle in BUNDLES:
             if not (root / SCOPE_DIR / bundle).is_dir():
@@ -304,10 +514,13 @@ def main() -> int:
             added += len(planned)
 
         if added == 0:
-            log("运行时已是最新，无需改动。")
-            return 0
+            if not shim_changed:
+                log("运行时已是最新，无需改动。")
+                return 0
 
         log(f"共补 {added} 个包，重新打包 …")
+        if shim_changed:
+            log("并写入 Android native addon 旁路")
         repack(root, ASSET)
 
     after = ASSET.stat().st_size

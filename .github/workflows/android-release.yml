@@ -71,6 +71,13 @@ jobs:
       - name: 安装 Android SDK 37
         run: sdkmanager --channel=3 "platforms;android-37.0"
 
+      - name: 校验随包 dsh 运行时
+        # 随包运行时只补包不换版：这里确认 dsh-base / dsh-acp-app 引用到的
+        # @deepseek-ai/* 依赖在 asset 里一个不缺（--check 不下载、不改文件）。
+        run: |
+          set -euo pipefail
+          python3 scripts/build-dsh-runtime.py --check
+
       - name: 解析版本号
         id: version
         env:
@@ -265,6 +272,19 @@ jobs:
 
       - name: 运行单元测试
         run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
+
+      # 脚本类逻辑只做字符串断言是挡不住回归的（bad YAML 那次就是这么漏的），
+      # 所以这里在真环境里造挂载跑一遍：符号链接前缀 + bind，断言挂载源数据没被删。
+      - name: dsh 清理脚本行为测试（真造挂载）
+        run: |
+          set -euo pipefail
+          generated="$(find . -name dsh-purge-script.sh -print -quit)"
+          if [ -z "$generated" ]; then
+            echo "::error::没找到单测生成的 dsh-purge-script.sh"
+            exit 1
+          fi
+          echo "用生成的脚本：$generated"
+          sudo bash scripts/test-dsh-purge.sh "$generated"
 
       - name: 输出失败详情
         if: always()

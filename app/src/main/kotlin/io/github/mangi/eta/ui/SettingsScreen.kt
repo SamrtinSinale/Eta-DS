@@ -54,6 +54,7 @@ import io.github.mangi.eta.EtaApp
 import io.github.mangi.eta.R
 import io.github.mangi.eta.agent.accessibility.AccessibilityProtectionClient
 import io.github.mangi.eta.agent.accessibility.AgentAccessibilityService
+import io.github.mangi.eta.agent.dsh.DshRuntimeInstaller
 import io.github.mangi.eta.config.PowerAssistantTarget
 import io.github.mangi.eta.config.Prefs
 import io.github.mangi.eta.data.repository.ProviderRepository
@@ -111,6 +112,7 @@ private fun SettingsPageContent(
     var hasUsedSystemizer by remember { mutableStateOf(enhancementHistory.hasUsedSystemizer) }
     var showSystemizerDialog by remember { mutableStateOf(false) }
     var installingSystemizer by remember { mutableStateOf(false) }
+    var reinstallingDshRuntime by remember { mutableStateOf(false) }
 
     // 悬浮窗权限状态：授权后从系统设置返回时（ON_RESUME）刷新。
     var overlayGranted by remember {
@@ -357,6 +359,41 @@ private fun SettingsPageContent(
                             )
                         },
                         onClick = { onNavigate(AppRoute.LinuxEnvironment) },
+                    )
+
+                    // 重装对话运行时：正常升级只在 REVISION 变化时才重解包，这条是随时可用的
+                    // 通道（也用来验证"先摘挂载再删"那套清理逻辑）。
+                    EtaPreferenceDivider()
+                    EtaArrowPreference(
+                        title = stringResource(R.string.settings_dsh_runtime_title),
+                        summary = stringResource(R.string.settings_dsh_runtime_summary),
+                        startAction = {
+                            EtaPreferenceIcon(
+                                icon = Icons.Rounded.Memory,
+                                tint = EtaPreferenceColors.Blue,
+                            )
+                        },
+                        enabled = !reinstallingDshRuntime,
+                        onClick = {
+                            reinstallingDshRuntime = true
+                            coroutineScope.launch {
+                                val reinstalled = withContext(Dispatchers.IO) {
+                                    DshRuntimeInstaller.reinstall(context)
+                                }
+                                reinstallingDshRuntime = false
+                                Toast.makeText(
+                                    context,
+                                    context.getString(
+                                        if (reinstalled) {
+                                            R.string.settings_dsh_runtime_done
+                                        } else {
+                                            R.string.settings_dsh_runtime_failed
+                                        },
+                                    ),
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            }
+                        },
                     )
                 }
             }

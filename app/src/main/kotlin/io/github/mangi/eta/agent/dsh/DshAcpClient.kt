@@ -2,9 +2,7 @@ package io.github.mangi.eta.agent.dsh
 
 import android.util.Log
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
 import org.json.JSONObject
@@ -13,6 +11,7 @@ import java.io.BufferedWriter
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -56,7 +55,14 @@ internal class DshAcpClient(
     @Volatile
     private var closed = false
 
+    /** stderr 的最后几行：[errorLoop] 写、[closeReason] 读，两条线程共用一个锁。 */
+    private val stderrLock = Any()
+    private val stderrTail = ArrayDeque<String>()
+
     private var readerThread: Thread? = null
+
+    /** 收尸时要 join 它，所以跨线程可见性要显式声明。 */
+    @Volatile
     private var errorThread: Thread? = null
 
     @Volatile
@@ -87,8 +93,8 @@ internal class DshAcpClient(
             val started = builder.start()
             process = started
             writer = BufferedWriter(OutputStreamWriter(started.outputStream, Charsets.UTF_8))
-            readerThread = Thread({ readLoop(started) }, "dsh-acp-reader").apply { isDaemon = true; start() }
             errorThread = Thread({ errorLoop(started) }, "dsh-acp-stderr").apply { isDaemon = true; start() }
+            readerThread = Thread({ readLoop(started) }, "dsh-acp-reader").apply { isDaemon = true; start() }
         }
     }
 
@@ -278,8 +284,26 @@ internal class DshAcpClient(
         } catch (throwable: Throwable) {
             Log.w(TAG, "ACP reader stopped", throwable)
         } finally {
-            notifyClosed("protocol-eof")
+            // 主动 close() 已经给过原因了，只有"自己断的"才需要收尸并解释。
+            if (!closed) notifyClosed(closeReason(started))
         }
+    }
+
+    /**
+     * 子进程为什么没了。
+     *
+     * EOF 只说明 stdout 关了，不说明原因：su 被 root 管理器拒了、chroot 失败、node 崩了、
+     * 随包模块加载失败，走到这里的样子一模一样。以前这里写死一句 protocol-eof，退出码与
+     * 子进程最后的 stderr 全被丢掉——界面只剩「initialize 失败：protocol-eof」，
+     * logcat 里也只有一个 EOF，谁都看不出该修什么。这里等进程收尸（有界）再读 stderr。
+     */
+    private fun closeReason(started: Process): String {
+        val exited = runCatching { started.waitFor(EXIT_WAIT_MS, TimeUnit.MILLISECONDS) }
+            .getOrDefault(false)
+        // stderr 管道要先读到 EOF，尾部那几行才在手里；给排空留一点时间。
+        runCatching { errorThread?.join(STDERR_DRAIN_MS) }
+        val code = runCatching { started.exitValue() }.getOrDefault(-1)
+        return describeClose(exited, code, stderrTailLines())
     }
 
     /**
@@ -328,10 +352,23 @@ internal class DshAcpClient(
         runCatching {
             while (true) {
                 val line = reader.readLine() ?: break
-                if (line.isNotBlank()) Log.i(TAG, "acp: ${line.take(400)}")
+                if (line.isNotBlank()) {
+                    rememberStderr(line)
+                    Log.i(TAG, "acp: ${line.take(400)}")
+                }
             }
         }
     }
+
+    /** 留下最后几行 stderr：子进程临死前的话通常就在里面。 */
+    private fun rememberStderr(line: String) {
+        synchronized(stderrLock) {
+            if (stderrTail.size >= STDERR_TAIL_LINES) stderrTail.removeFirst()
+            stderrTail.addLast(line.take(STDERR_LINE_CHARS))
+        }
+    }
+
+    private fun stderrTailLines(): List<String> = synchronized(stderrLock) { stderrTail.toList() }
 
     private fun notifyClosed(reason: String) {
         if (closed) return
@@ -385,6 +422,14 @@ internal class DshAcpClient(
         private const val SESSION_TIMEOUT_MS = 60_000L
         private const val PROMPT_TIMEOUT_MS = 30 * 60 * 1000L
 
+        /** 收尸等待：进程早退时它立刻返回，只有"stdout 关了但人还活着"才真等。 */
+        private const val EXIT_WAIT_MS = 1_000L
+
+        /** 排空 stderr 的等待上限。 */
+        private const val STDERR_DRAIN_MS = 300L
+        private const val STDERR_TAIL_LINES = 5
+        private const val STDERR_LINE_CHARS = 200
+
         /** ACP 用 JSON 数组字符串表示 (provider, model) 对。 */
         fun modelValue(providerRoute: String, model: String): String =
             JSONArray().put(providerRoute).put(model).toString()
@@ -428,4 +473,19 @@ internal class AcpResponseSlots {
         slots.values.forEach { it.complete(failure) }
         slots.clear()
     }
+}
+
+/**
+ * 把「ACP 子进程为什么断」写成一句能照着修的话。
+ *
+ * protocol-eof 本身没有任何信息量：su 被拒、chroot 失败、node 崩了，全都是「stdout 关了」。
+ * 所以退出码与 stderr 尾部必须一起带出来——界面上的直接后果，就是从
+ * 「Runtime 运行失败 / initialize 失败：protocol-eof」变成
+ * 「……protocol-eof（进程退出码 1）：<子进程自己的报错>」。
+ */
+internal fun describeClose(exited: Boolean, exitCode: Int, stderrTail: List<String>): String {
+    val cause = if (exited) "进程退出码 $exitCode" else "进程仍在运行但 stdout 已关闭"
+    val tail = stderrTail.joinToString(" ").trim()
+    if (tail.isEmpty()) return "protocol-eof（$cause）"
+    return "protocol-eof（$cause）：$tail"
 }

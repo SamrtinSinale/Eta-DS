@@ -1,7 +1,6 @@
 package io.github.mangi.eta.agent.tool
 
 import android.app.ActivityManager
-import android.app.AlarmManager
 import android.app.Notification
 import android.content.Context
 import android.content.Intent
