@@ -95,10 +95,10 @@ class AnsiTextTest {
 
     @Test
     fun realColorCliBannerKeepsTextAndColors() {
-        // 真实 CLI 横幅捕获（含 CRLF、256 色与粗体 SGR）。
-        val raw = "\r\n  \u001B[38;5;111m▐█▛█▛█▌\u001B[39m  \u001B[1m\u001B[38;5;111mKimi server ready\u001B[39m\u001B[22m  \u001B[38;5;244m0.39.1\u001B[39m\r\n  \u001B[38;5;111m▐█████▌\u001B[39m  \u001B[38;5;244mLocal web UI is available from this machine.\u001B[39m\r\n"
+        // CLI 横幅样例（含 CRLF、256 色与粗体 SGR）。
+        val raw = "\r\n  \u001B[38;5;111m▐█▛█▛█▌\u001B[39m  \u001B[1m\u001B[38;5;111mdsh web ready\u001B[39m\u001B[22m  \u001B[38;5;244m0.1.5\u001B[39m\r\n  \u001B[38;5;111m▐█████▌\u001B[39m  \u001B[38;5;244mLocal web UI is available from this machine.\u001B[39m\r\n"
         val parsed = ansiToAnnotatedString(raw)
-        assertTrue(parsed.text.contains("Kimi server ready"))
+        assertTrue(parsed.text.contains("dsh web ready"))
         assertTrue(parsed.text.contains("▐█▛█▛█▌"))
         // 38;5;111 → cube(135,175,255)
         assertTrue(parsed.spanStyles.any { it.item.color == Color(0xFF87AFFF) })

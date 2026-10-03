@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ShortText
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.rounded.AddComment
+import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.runtime.Composable
@@ -23,7 +24,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.mangi.eta.R
@@ -292,7 +292,7 @@ private fun TopBarOverflowMenu(
                         text = launchDshWebText,
                         icon = { modifier ->
                             Icon(
-                                painter = painterResource(R.drawable.ic_kimi_code),
+                                imageVector = Icons.Rounded.Code,
                                 contentDescription = null,
                                 modifier = modifier.size(TopBarMenuIconSize),
                             )

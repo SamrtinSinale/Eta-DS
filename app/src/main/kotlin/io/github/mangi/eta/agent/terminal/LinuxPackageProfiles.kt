@@ -99,9 +99,10 @@ internal object LinuxPackageProfiles {
     )
 
     /**
-     * Kimi Code 使用 npm 分发，运行在 Node profile 之上；可选原生扩展由 npm 按平台安装。
-     * 始终安装最新正式版（升级重装即可）；--prefix /usr/local 让 kimi 进入 PATH 首位，
-     * 与 Node 归档自身的 prefix 无关。国内镜像优先，官方 registry 兜底。
+     * DeepSeek Harness（`@deepseek-ai/dsh`）使用 npm 分发，运行在 Node profile 之上；
+     * 可选原生扩展由 npm 按平台安装。始终安装最新正式版（升级重装即可）；
+     * --prefix /usr/local 让 dsh 进入 PATH 首位，与 Node 归档自身的 prefix 无关。
+     * 国内镜像优先，官方 registry 兜底。
      */
     private const val DSH_INSTALL_SCRIPT =
         "npm install -g --prefix /usr/local --allow-scripts=@deepseek-ai/dsh-subprocess-local,koffi,node-pty,@google/genai,protobufjs --registry=https://registry.npmmirror.com " +

@@ -205,10 +205,10 @@ internal data class DshRuntimeConfig(
             "/system/bin:/system/xbin:/product/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
         private const val ENV_API_KEY = "DEEPSEEK_API_KEY"
         private const val ENV_BASE_URL = "DEEPSEEK_BASE_URL"
-        private const val MCP_SERVER_NAME = "eta"
+        private const val MCP_SERVER_NAME = "eda"
         private const val MCP_TRANSPORT_HTTP = "http"
-        private const val OVERLAY_RELATIVE = "opt/dsh/eta-run-overlay.patch.yml"
-        private const val OVERLAY_IN_ROOT = "/opt/dsh/eta-run-overlay.patch.yml"
+        private const val OVERLAY_RELATIVE = "opt/dsh/eda-run-overlay.patch.yml"
+        private const val OVERLAY_IN_ROOT = "/opt/dsh/eda-run-overlay.patch.yml"
         private const val SKILLS_TARGET_REL = "root/.agents/skills"
         private const val SKILLS_IN_ROOT = "/root/.agents/skills"
         private const val MAX_SKILL_LINES = 40

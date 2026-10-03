@@ -1,4 +1,4 @@
-name: Eta Release Build
+name: Eda Release Build
 
 # 只构建 Release（签名）APK：
 #   - push 到 main：构建并上传 Artifact，不发布 Release
@@ -223,7 +223,7 @@ jobs:
             "${{ steps.apk.outputs.release_path }}" \
             --repo "${{ github.repository }}" \
             --target "${{ github.sha }}" \
-            --title "Eta ${VERSION_NAME}" \
+            --title "Eda ${VERSION_NAME}" \
             --generate-notes
 
   unit-tests:

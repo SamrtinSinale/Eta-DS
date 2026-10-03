@@ -16,7 +16,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * 把 Eta 的本地工具以 MCP(streamable-http) 暴露给外部 agent（例如 DeepSeek Harness）。
+ * 把 Eda 的本地工具以 MCP(streamable-http) 暴露给 dsh 内核。
  *
  * 设计约束：
  * - 只绑定回环地址，不对局域网或公网暴露；

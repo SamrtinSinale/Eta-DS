@@ -7,7 +7,7 @@ import io.github.mangi.eta.agent.terminal.LinuxExecutionBackend
 import io.github.mangi.eta.agent.terminal.TerminalEnvironment
 import kotlinx.coroutines.delay
 
-/** Kimi 启动和复用的事务边界：只有本次创建且未打开浏览器的任务会被回收。 */
+/** dsh Web 启动和复用的事务边界：只有本次创建且未打开浏览器的任务会被回收。 */
 internal class DshWebSession(
     private val tasks: Tasks,
     private val openUrl: (String) -> Boolean,
@@ -54,7 +54,7 @@ internal class DshWebSession(
     companion object {
         const val COMMAND = "dsh --patch " + DshMcpBridge.PATCH_PATH + " --profile web --no-open"
         fun addressFromLogs(text: String): String? = WEB_URL_REGEX.find(text)?.value
-        // dsh web 打印的是 `/?token=`（历史 Kimi 是 `#token=`），两者都要认；
+        // dsh web 打印的是 `/?token=`；旧的 `#token=` 形式也一并认掉，
         // token 字符集收紧到 URL safe，避免把日志里的 ANSI 序列尾巴吃进来。
         private val WEB_URL_REGEX = Regex("""http://127\.0\.0\.1:\d+/[?#]token=[A-Za-z0-9_-]+""")
     }
