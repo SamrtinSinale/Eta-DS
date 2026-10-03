@@ -1,30 +1,30 @@
-# Eda
+# Heta
 
 **简体中文** | [English](README_EN.md)
 
-<p><a href="https://github.com/SamrtinSinale/Eda-DS/releases"><img src="https://img.shields.io/github/downloads/SamrtinSinale/Eda-DS/total?logo=github&amp;label=%E4%B8%8B%E8%BD%BD%E9%87%8F&amp;color=1677FF" alt="GitHub Releases 累计下载量"></a> <img src="https://img.shields.io/badge/minSdk-34-3DDC84?logo=android&amp;logoColor=white" alt="minSdk 34"> <img src="https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&amp;logoColor=white" alt="Kotlin 2.4.10"> <img src="https://img.shields.io/badge/AGP-9.3.2-3DDC84?logo=android&amp;logoColor=white" alt="AGP 9.3.2"> <img src="https://img.shields.io/badge/Assistant%20Integrations-ColorOS%20%26%20HyperOS-1677FF" alt="Assistant integrations for ColorOS and HyperOS"></p>
+<p><a href="https://github.com/SamrtinSinale/Heta-dsh/releases"><img src="https://img.shields.io/github/downloads/SamrtinSinale/Heta-dsh/total?logo=github&amp;label=%E4%B8%8B%E8%BD%BD%E9%87%8F&amp;color=1677FF" alt="GitHub Releases 累计下载量"></a> <img src="https://img.shields.io/badge/minSdk-34-3DDC84?logo=android&amp;logoColor=white" alt="minSdk 34"> <img src="https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&amp;logoColor=white" alt="Kotlin 2.4.10"> <img src="https://img.shields.io/badge/AGP-9.3.2-3DDC84?logo=android&amp;logoColor=white" alt="AGP 9.3.2"> <img src="https://img.shields.io/badge/Assistant%20Integrations-ColorOS%20%26%20HyperOS-1677FF" alt="Assistant integrations for ColorOS and HyperOS"></p>
 
 **面向 Android 的第三方系统级 AI 助手**
 
-Eda 是为手机和移动设备设计的 AI Agent，结合了 [Codex](https://openai.com/codex/) 这类 Coding Agent 自主规划与执行任务的能力，以及[豆包手机助手](https://o.doubao.com/)所展示的 GUI Agent 跨应用操作方式。它可以处理文件、执行命令、编写代码，也可以通过系统与厂商应用适配，直接调用系统 API，检索通知、日程、照片等本机信息。
+Heta 是为手机和移动设备设计的 AI Agent，结合了 [Codex](https://openai.com/codex/) 这类 Coding Agent 自主规划与执行任务的能力，以及[豆包手机助手](https://o.doubao.com/)所展示的 GUI Agent 跨应用操作方式。它可以处理文件、执行命令、编写代码，也可以通过系统与厂商应用适配，直接调用系统 API，检索通知、日程、照片等本机信息。
 
 **系统级能力**：
 
 - **系统操作**：直接调用 Android API，完成设置闹钟、控制媒体、调整音量等操作。
 - **厂商数据**：在对应系统与授权条件下，直接检索小布记忆、便签、录音摘要等数据。
-- **系统入口**：通过 Xposed 接管电源键、小布和超级小爱，从熟悉的助手入口发起 Eda 任务。
+- **系统入口**：通过 Xposed 接管电源键、小布和超级小爱，从熟悉的助手入口发起 Heta 任务。
 
-Eda 内置 Agent Runtime，通过 Agent Loop 编排模型调用、工具执行和结果反馈，并支持 Skills 与 MCP 扩展。使用 AI 功能需要自备模型服务的 **API Key（BYOK）**，模型与服务商由你选择。
+Heta 内置 Agent Runtime，通过 Agent Loop 编排模型调用、工具执行和结果反馈，并支持 Skills 与 MCP 扩展。使用 AI 功能需要自备模型服务的 **API Key（BYOK）**，模型与服务商由你选择。
 
 支持 **Android 14 及以上版本**，App 本体不限手机品牌，基础功能无需 Root。Root 和 LSPosed 可进一步扩展系统访问与助手入口，具体能力取决于授权和 ROM 适配。
 
-[下载 APK](https://github.com/SamrtinSinale/Eda-DS/releases) · [快速开始](#快速开始) · [为什么做 Eda](#为什么做-eda)
+[下载 APK](https://github.com/SamrtinSinale/Heta-dsh/releases) · [快速开始](#快速开始) · [为什么做 Heta](#为什么做-heta)
 
 ## 界面预览
 
 | GUI Agent | 小布助手 BYOK |
 | :-------: | :-----------: |
-| <img src="docs/Screenshots/demo_gui_agent.gif" width="320" alt="Eda GUI Agent 执行演示"> | <img src="docs/Screenshots/demo_tools.gif" width="320" alt="从小布助手入口发起 Eda 任务"> |
+| <img src="docs/Screenshots/demo_gui_agent.gif" width="320" alt="Heta GUI Agent 执行演示"> | <img src="docs/Screenshots/demo_tools.gif" width="320" alt="从小布助手入口发起 Heta 任务"> |
 
 更多界面：聊天、设备工具与设置
 
@@ -57,43 +57,43 @@ Eda 内置 Agent Runtime，通过 Agent Loop 编排模型调用、工具执行�
 
 ### Agent Runtime
 
-Agent Runtime 运行在 Eda App 内，来自聊天页面和系统助手的请求共用同一个 Agent Loop。模型通过 Tool Calling 选择工具，执行结果回到上下文，再决定下一步。工具调用按 JSON Schema 校验，并在执行前检查权限；Hook 进程只负责入口与结果回传。
+Agent Runtime 运行在 Heta App 内，来自聊天页面和系统助手的请求共用同一个 Agent Loop。模型通过 Tool Calling 选择工具，执行结果回到上下文，再决定下一步。工具调用按 JSON Schema 校验，并在执行前检查权限；Hook 进程只负责入口与结果回传。
 
 Runtime 同时管理流式事件、steering、取消和增量 transcript。追加指令在当前 turn 完成后进入下一轮，会话与结果在本机归档；中断后尝试恢复已有记录，不自动重放操作。详细设计见 [Agent Runtime](docs/AGENT_RUNTIME.md)。
 
 ### 可选角色
 
-侧边栏的“角色”可管理、导入和导出兼容酒馆的 PNG / JSON 角色卡，并从角色开始对话。角色会话仍能调用 Eda 的手机工具，支持用户人设、内嵌世界书和独立剧情记忆；普通对话及系统助手入口保持默认 Eda。角色正文可原位编辑，重新生成只改写回复，不重复执行设备动作。兼容范围和记忆说明见[角色功能](docs/CHARACTERS.md)。
+侧边栏的“角色”可管理、导入和导出兼容酒馆的 PNG / JSON 角色卡，并从角色开始对话。角色会话仍能调用 Heta 的手机工具，支持用户人设、内嵌世界书和独立剧情记忆；普通对话及系统助手入口保持默认 Heta。角色正文可原位编辑，重新生成只改写回复，不重复执行设备动作。兼容范围和记忆说明见[角色功能](docs/CHARACTERS.md)。
 
 ## 为移动设备重新设计的终端
 
-Eda 的终端可以由 Agent 调用，也可以由你直接操作。多个会话各自保留工作目录与环境；简洁模式按命令展示输入输出，PTY 控制台支持 TUI、快捷键与 ANSI 渲染。异步命令和守护任务都可以查看日志、主动停止。
+Heta 的终端可以由 Agent 调用，也可以由你直接操作。多个会话各自保留工作目录与环境；简洁模式按命令展示输入输出，PTY 控制台支持 TUI、快捷键与 ANSI 渲染。异步命令和守护任务都可以查看日志、主动停止。
 
 - **Linux 环境**：可选 Alpine 或 Debian，普通设备使用 PRoot，Root 设备还可选择 chroot。两种后端独立安装，不自动迁移数据；PRoot 中的模拟 root 不提供 Android 系统权限。
 - **开发工具**：Python、Node.js、SSH、APK 分析与 DeepSeek Harness 按需安装。
 - **文件管理**：私有工作区支持导入、导出；已授权的 Android 目录可共享到 Linux 的 `/workspace/mounts/`，也可在 App 内浏览 Linux 文件。
 
-Eda 本体可以读取项目、修改代码、运行命令并验证结果。如果想在手机上持续进行编程工作，[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的 **dsh Web** 提供了更适合移动端的 Web UI，可以在浏览器中持续对话、查看代码修改与执行结果，享受完整的 Coding Agent 工作体验，随时随地 Vibe Coding。
+Heta 本体可以读取项目、修改代码、运行命令并验证结果。如果想在手机上持续进行编程工作，[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的 **dsh Web** 提供了更适合移动端的 Web UI，可以在浏览器中持续对话、查看代码修改与执行结果，享受完整的 Coding Agent 工作体验，随时随地 Vibe Coding。
 
-在 Eda 中安装 Linux、Node.js 与 DeepSeek Harness 后，即可从首页一键启动 dsh Web，也可以在终端运行 `dsh web`。dsh 使用独立的模型配置与会话，需在其中单独完成配置；离开页面后可返回继续使用，也可从 Eda 主动停止。
+在 Heta 中安装 Linux、Node.js 与 DeepSeek Harness 后，即可从首页一键启动 dsh Web，也可以在终端运行 `dsh web`。dsh 使用独立的模型配置与会话，需在其中单独完成配置；离开页面后可返回继续使用，也可从 Heta 主动停止。
 
 ## 模型与 BYOK
 
-使用 Eda 的 AI 功能需要自备模型服务的 **API Key**。内置 OpenAI、Anthropic、阿里百炼、DeepSeek、Kimi、MiMo、MiniMax、StepFun、硅基流动和 OpenRouter 等提供商配置，也可添加自定义服务。
+使用 Heta 的 AI 功能需要自备模型服务的 **API Key**。内置 OpenAI、Anthropic、阿里百炼、DeepSeek、Kimi、MiMo、MiniMax、StepFun、硅基流动和 OpenRouter 等提供商配置，也可添加自定义服务。
 
 内置提供商附带常用对话模型预设；目录更新会为已有内置配置补充新型号，并保留用户的模型设置和当前选择。硅基流动与 OpenRouter 的模型目录变化较快，可在提供商的「模型」页面从服务端拉取。
 
-提供商列表还可从 [models.dev](https://models.dev/) 社区目录挑选兼容的对话服务和模型；联网时更新目录，离线时使用本地缓存或随应用打包的快照。导入后的提供商默认停用，需核对服务地址、填写该服务的 API Key 并启用；Eda 读取目录时不发送已保存的 API Key。
+提供商列表还可从 [models.dev](https://models.dev/) 社区目录挑选兼容的对话服务和模型；联网时更新目录，离线时使用本地缓存或随应用打包的快照。导入后的提供商默认停用，需核对服务地址、填写该服务的 API Key 并启用；Heta 读取目录时不发送已保存的 API Key。
 
 Provider 层支持 OpenAI-compatible Chat Completions、Responses API 和 Anthropic Messages，包括 SSE、Tool Calling、图片输入与推理内容。你可以自定义服务地址、请求头和请求体，拉取或手动添加模型，调整上下文长度与思考档位。具体能力取决于模型与接口，部分 Responses 提供商还可开启服务端网页搜索。
 
-提供商配置中的“自定义请求头”默认折叠，可添加、编辑和删除名称/值，保存后用于模型列表与对话请求；“测试连接”会使用尚未保存的配置。支持覆盖 `User-Agent`，认证和传输请求头仍由 Eda 管理。连接 OpenCode 官方端点时，Eda 自动发送每段对话稳定的 `x-opencode-session`，无需手动填写；默认客户端标识为 `Eda`。
+提供商配置中的“自定义请求头”默认折叠，可添加、编辑和删除名称/值，保存后用于模型列表与对话请求；“测试连接”会使用尚未保存的配置。支持覆盖 `User-Agent`，认证和传输请求头仍由 Heta 管理。连接 OpenCode 官方端点时，Heta 自动发送每段对话稳定的 `x-opencode-session`，无需手动填写；默认客户端标识为 `Heta`。
 
 ## 系统助手入口
 
-- **长按电源键**：选择唤起系统默认助手、Gemini 或 Eda。
-- **Eda 系统助手**：从电源键入口打开全局语音浮窗，竖屏下光效从按键位置沿屏幕边缘进入并汇聚到底部，也可切换键盘或点击建议提问；自动附带唤醒时的截图与应用内容，无需额外点击或开启无障碍截图。语音识别可选择系统服务、千问或豆包；云端模式只需麦克风权限与对应服务配置，不依赖设备自带识别服务。支持助手回答自动播报、聊天听写和手动朗读，详见[语音配置](docs/VOICE.md)。
-- **小布 / 超级小爱接管**：保留厂商助手的电源键入口，将请求交给 Eda，使用自己配置的模型。
+- **长按电源键**：选择唤起系统默认助手、Gemini 或 Heta。
+- **Heta 系统助手**：从电源键入口打开全局语音浮窗，竖屏下光效从按键位置沿屏幕边缘进入并汇聚到底部，也可切换键盘或点击建议提问；自动附带唤醒时的截图与应用内容，无需额外点击或开启无障碍截图。语音识别可选择系统服务、千问或豆包；云端模式只需麦克风权限与对应服务配置，不依赖设备自带识别服务。支持助手回答自动播报、聊天听写和手动朗读，详见[语音配置](docs/VOICE.md)。
+- **小布 / 超级小爱接管**：保留厂商助手的电源键入口，将请求交给 Heta，使用自己配置的模型。
 
 电源键接管需要 LSPosed 与对应系统支持。
 
@@ -115,7 +115,7 @@ Provider 层支持 OpenAI-compatible Chat Completions、Responses API 和 Anthro
 
 ## 快速开始
 
-1. 从 [Releases](https://github.com/SamrtinSinale/Eda-DS/releases) 下载 APK，安装后在“模型提供商”中填写 API Key 并选择模型。执行任务需要 Tool Calling，理解图片还需模型支持图片输入。
+1. 从 [Releases](https://github.com/SamrtinSinale/Heta-dsh/releases) 下载 APK，安装后在“模型提供商”中填写 API Key 并选择模型。执行任务需要 Tool Calling，理解图片还需模型支持图片输入。
 2. 按任务需要配置工具开关与权限：GUI Agent 需要无障碍服务；通知、应用使用情况分别授权；位置工具需要“始终允许”。工具页可查看当前设备的可用能力。
 3. 开始对话。需要 Linux 时，在“Linux 工具环境”中安装发行版、基础工具及所需开发工具；需要系统入口时，参见[系统助手入口](#系统助手入口)。
 
@@ -125,13 +125,13 @@ Provider 层支持 OpenAI-compatible Chat Completions、Responses API 和 Anthro
 
 联系人、短信、日历等专用检索目前仍需要 Root。完整条件与验证范围见[设备支持说明](docs/ROOTLESS_SUPPORT.md)。
 
-## 为什么做 Eda
+## 为什么做 Heta
 
 ### 从不好用的手机助手开始
 
-做 Eda 的起点很直接：我觉得很多手机厂商的 AI 助手不好用。回答不够准确，稍复杂的需求就需要自己接着操作。我最早想解决的只是屏幕问答：刷到一个陌生概念，就在当前屏幕上问清楚，让模型结合内容搜索、解释，省去复制文字、切换应用和重新描述背景的过程。
+做 Heta 的起点很直接：我觉得很多手机厂商的 AI 助手不好用。回答不够准确，稍复杂的需求就需要自己接着操作。我最早想解决的只是屏幕问答：刷到一个陌生概念，就在当前屏幕上问清楚，让模型结合内容搜索、解释，省去复制文字、切换应用和重新描述背景的过程。
 
-这样的体验很依赖模型能力。模型迭代很快，我希望手机助手也能及时用上更好的模型。因此，我把自选模型作为 Eda 的基础能力，让用户保留熟悉的手机入口，用自己选择的模型问答和执行任务。
+这样的体验很依赖模型能力。模型迭代很快，我希望手机助手也能及时用上更好的模型。因此，我把自选模型作为 Heta 的基础能力，让用户保留熟悉的手机入口，用自己选择的模型问答和执行任务。
 
 ### 桌面 Agent 百花齐放，手机 AI 却处处碰壁
 
@@ -153,13 +153,13 @@ Android 虽然也有 Shell，但普通 App 能访问的目录、系统能力和�
 
 我既是第三方开发者，也是 Android 玩机用户，没有预装合作和自有生态的商业包袱，所以愿意在系统适配上做得更激进一些，尽可能把手机已有的能力开放给用户自己选择的模型。
 
-Eda 在这一层做适配：通过 Xposed 接管小布、超级小爱和电源键入口，直接调用 Android 系统 API，并检索小布记忆、便签、录音摘要等已适配的数据源。Shell 与 Linux 提供计算环境，GUI Agent 覆盖缺少接口的应用操作。这些能力共用同一套 Agent Runtime，让模型既能了解手机上的事情，也有工具把事情做下去。
+Heta 在这一层做适配：通过 Xposed 接管小布、超级小爱和电源键入口，直接调用 Android 系统 API，并检索小布记忆、便签、录音摘要等已适配的数据源。Shell 与 Linux 提供计算环境，GUI Agent 覆盖缺少接口的应用操作。这些能力共用同一套 Agent Runtime，让模型既能了解手机上的事情，也有工具把事情做下去。
 
 我也不认为每件事都值得交给 AI。几次点击就能完成的操作，如果要多花时间、支付调用费用，还得盯着模型纠错，我宁愿自己动手。我更期待它帮我处理需要结合本机信息、跨应用重复操作，或不方便手动完成的任务。手机 Agent 的价值取决于对系统能力、本机数据和移动交互的理解与适配，功能数量本身不足以说明产品是否好用。
 
 ### 对 AI 手机与 Agentic OS 的展望
 
-> 以下是长期愿景，部分能力尚未在 Eda 中实现。
+> 以下是长期愿景，部分能力尚未在 Heta 中实现。
 
 GUI 是为人设计的，通过层层菜单把模糊需求变成具体操作。对模型而言，直接调用 API、CLI、MCP 等接口更友好，能减少截图、控件识别和页面变化带来的开销与错误。GUI Agent 用来补齐没有开放接口的场景。
 
@@ -169,7 +169,7 @@ App 在其中的角色也会改变：它们继续提供专业功能和服务，�
 
 个人上下文、记忆和任务状态则应随用户跨设备延续。例如，在手机上规划好出行，上车后车机就能理解目的并接续导航，无需重新交代背景。手机、电脑、汽车和眼镜可以共享同一个个人 Agent 的记忆，利用各自的感知与执行能力协作。语音、视觉和动作进一步拓展交互方式，让设备在合适的时机主动响应，逐步把 Agent 的能力延伸到物理世界。
 
-Eda 先从现有 Android 上的模型、上下文与工具做起。真正落地到手机上的 Agentic OS，还需要手机厂商、Android 应用开发者、模型服务商与硬件生态共同推进；技术要成熟，接口要开放，各方利益也要协调，完整形态仍然遥遥无期。
+Heta 先从现有 Android 上的模型、上下文与工具做起。真正落地到手机上的 Agentic OS，还需要手机厂商、Android 应用开发者、模型服务商与硬件生态共同推进；技术要成熟，接口要开放，各方利益也要协调，完整形态仍然遥遥无期。
 
 ## 深入了解
 
@@ -181,14 +181,14 @@ Eda 先从现有 Android 上的模型、上下文与工具做起。真正落地�
 
 ## 参考与致谢
 
-- [Pi Coding Agent](https://github.com/earendil-works/pi)：Eda Agent Runtime 的核心参考，包括 Agent Loop、Tool Calling、steering 与 transcript 状态管理。
+- [Pi Coding Agent](https://github.com/earendil-works/pi)：Heta Agent Runtime 的核心参考，包括 Agent Loop、Tool Calling、steering 与 transcript 状态管理。
 - [OmniBot](https://github.com/omnimind-ai/OmniBot)：Android AI Agent 方向的参考项目。
 - [libxposed API](https://github.com/libxposed/api)：现代 Xposed API。
 - [Miuix](https://github.com/compose-miuix-ui/miuix)：UI 组件库。
 
 ## 上游与许可证
 
-本仓库是 [Mangi-11/Eta](https://github.com/Mangi-11/Eta) 的 fork，改动限于应用名称（Eda）、`applicationId`（`io.sartin.eats`）与部分界面文案，功能实现来自上游。
+本仓库是 [Mangi-11/Eta](https://github.com/Mangi-11/Eta) 的 fork，改动限于应用名称（Heta）、图标资源与部分界面文案；`applicationId` 沿用上游的 `io.sartin.eats`，功能实现来自上游。
 
 代码沿用上游的 [PolyForm Noncommercial License 1.0.0](LICENSE)，版权归原作者[蛮吉（Mangi-11）](https://github.com/Mangi-11)所有，`LICENSE` 末尾的 Required Notice 原样保留。按该许可证，非商业用途可使用、修改和分发；贩卖、收费代装及其他商业使用需先取得原作者书面授权。
 

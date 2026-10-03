@@ -124,17 +124,17 @@ internal object AgentToolRequirements {
                 properties?.getJSONObject("environment")?.put("description",
                     "android 使用普通 Android Shell；linux 使用用户选择的发行版和免 Root 后端。默认 android。")
                 properties?.getJSONObject("cwd")?.put("description",
-                    "工作目录。Android 默认使用 Eda 私有工作区，Linux 默认 /workspace。")
+                    "工作目录。Android 默认使用 Heta 私有工作区，Linux 默认 /workspace。")
             }
             "run_command" -> {
                 function.put("description",
                     "通过普通 Android Shell 执行单次非交互命令，以 App UID 运行；只能访问当前应用有权访问的资源。")
-                properties?.getJSONObject("cwd")?.put("description", "工作目录，默认使用 Eda 私有工作区。")
+                properties?.getJSONObject("cwd")?.put("description", "工作目录，默认使用 Heta 私有工作区。")
             }
             "list_directory" -> {
-                function.put("description", "列出当前应用有权访问的目录，默认使用 Eda 私有工作区。")
+                function.put("description", "列出当前应用有权访问的目录，默认使用 Heta 私有工作区。")
                 properties?.optJSONObject("path")?.apply {
-                    put("description", "目录路径；未提供时使用 Eda 私有工作区。")
+                    put("description", "目录路径；未提供时使用 Heta 私有工作区。")
                     remove("default")
                 }
             }

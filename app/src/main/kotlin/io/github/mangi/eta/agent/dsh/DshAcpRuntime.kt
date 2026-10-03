@@ -1,6 +1,7 @@
 package io.github.mangi.eta.agent.dsh
 
 import android.content.Context
+import android.util.Base64
 import android.util.Log
 import io.github.mangi.eta.agent.model.AgentConversationCodec
 import io.github.mangi.eta.agent.model.AgentModelClient
@@ -20,30 +21,57 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * 用 DeepSeek Harness 作为执行内核：一次 run 对应一条 ACP 会话轮次。
+ * 用 DeepSeek Harness 作为执行内核：一次 run 对应 dsh 会话里的一个回合。
  *
  * 与 AgentRuntimeRunExecutor 的分工：
  * - 这里只负责驱动 ACP，并把会话更新翻译成 [AgentEvent] 交给既有 UI 管线；
  * - 工具执行不在这里发生 —— dsh 通过 MCP 调用 Eta 暴露的本地工具端点，
  *   权限检查仍在 AgentLocalTools.execute 内部完成；
- * - 模型、地址与凭据直接取 run 请求里已冻结的配置，用户在 Eda 配置一次即可。
+ * - 模型、地址与凭据直接取 run 请求里已冻结的配置，用户在 Heta 配置一次即可。
+ *
+ * 会话续接：dsh 自己持久化会话，第二回合起用 `session/resume` 带着完整上下文接着聊，
+ * 只把新消息发过去；只有首回合（或历史分叉、换模型、会话丢失）才 `session/new`
+ * 并注入历史摘要（见 [promptWithHistory]）。
  */
 internal class DshAcpRuntime(
     private val config: DshRuntimeConfig,
+    private val sessionStore: DshAcpSessionStore? = null,
 ) {
     fun execute(session: AgentRuntimeSession, request: AgentRuntimeWire.RunRequest): Boolean {
         val text = request.prompt?.trim().orEmpty()
-        if (text.isEmpty()) {
+        // 只贴图不打字是合法的：dsh 的准入条件是「有图片，或有非空文本」，二者其一即可。
+        // 这里以前只看 text，于是纯图片消息在发出去之前就被判成"消息为空"——
+        // 表现就是用户贴了图却收到"消息为空"，只能改成手动发图片路径。
+        val images = request.images.mapNotNull { acpImage(it.reference) }
+        if (text.isEmpty() && images.isEmpty()) {
             finishWithFailure(session, "消息为空")
             return false
         }
-        val promptText = promptWithHistory(request, text)
-        Log.i(TAG, "prompt: history=${request.history.size} msgs, chars=${promptText.length}")
+        if (request.images.isNotEmpty() && images.isEmpty()) {
+            Log.w(
+                TAG,
+                "dropped ${request.images.size} image(s): reference is not an inline data URL " +
+                    "in dsh's accepted raster vocabulary",
+            )
+        }
+        val sessionKey = request.effectiveModelSessionId
+        // 只有历史仍是上次那段前缀、且模型没换，才允许续接；否则重开会话并注入历史。
+        val stored = sessionStore?.load(sessionKey)
+        val resumable = stored?.let {
+            DshAcpSessionStateCodec.canResume(it, request.history, config.model, config.providerRoute)
+        } == true
+        // resume 时 dsh 自己带着上下文，只发这一轮的新消息；重开会话才需要历史摘要。
+        val promptText = if (resumable) text else promptWithHistory(request, text)
+        Log.i(
+            TAG,
+            "prompt: history=${request.history.size} msgs, chars=${promptText.length}, " +
+                "resume=${if (resumable) stored?.sessionId else "none"}",
+        )
         val runId = session.runId
         var round = 0
         var contentChars = 0
-        // dsh 不保存自己的会话：把这一轮做过什么回写成 Eta 的历史消息，
-        // 否则 checkpoint 里只剩用户消息，下一轮它什么都不记得。
+        // 这一轮做过什么仍要回写成 Eta 的历史消息：UI 与 checkpoint 只认 Eta 的会话，
+        // dsh 自己的会话是"另一份账"（用于续接上下文），两边都要有。
         val transcript = DshTranscriptBuilder(runId)
         // ACP 是流式的：正文与思考要自己累积，收尾时随结果一起交回，否则 UI 只有增量没有终态。
         val assistantText = StringBuilder()
@@ -174,14 +202,23 @@ internal class DshAcpRuntime(
                         }
 
                         UPDATE_USAGE -> {
+                            // ACP 的 usage_update：used 是当前上下文占用量，size 是窗口本身。
+                            // 早先把 size 写进 inputTokens，于是库里存出 input_tokens=1000000
+                            // 这种假用量；窗口不是输入量，这里只上报占用，窗口只用来自检。
                             val used = update.optInt("used", -1)
                             val size = update.optInt("size", -1)
+                            val configured = request.config.contextWindow
+                            if (size > 0 && configured != null && configured > 0 && size != configured) {
+                                Log.w(
+                                    TAG,
+                                    "context window mismatch: dsh=$size, model config=$configured",
+                                )
+                            }
                             session.emit(
                                 AgentEvent.UsageReceived(
                                     round = round,
                                     usage = AgentTokenUsage(
                                         contextTokens = if (used >= 0) used else null,
-                                        inputTokens = if (size >= 0) size else null,
                                     ),
                                 )
                             )
@@ -205,37 +242,73 @@ internal class DshAcpRuntime(
         return try {
             client.start()
             Log.i(TAG, "acp process spawned")
+            var record: DshAcpSessionState? = null
             runBlocking {
                 client.initialize()
-                val sessionId = client.newSession(
+                // dsh 只在自己声明了 image 能力时才收图片。没声明通常意味着模型不在它的
+                // 模型目录里（自定义网关的模型名），被当成纯文本了；此时硬发会被
+                // invalidParams 顶回来，不如在这里给出能照着修的说明。
+                if (images.isNotEmpty() && !client.imagePromptEnabled) {
+                    throw DshAcpException(
+                        "当前模型未向 dsh 声明图片输入，本轮 ${images.size} 张图片发不出去。" +
+                            "需要在 dsh 的模型目录（llm-deepseek.config.models）里为该模型声明 " +
+                            "inputModalities: [text, image]",
+                    )
+                }
+                val resumableId = stored?.sessionId?.takeIf { resumable }
+                val resumedId = resumableId?.let { id ->
+                    runCatching {
+                        client.resumeSession(
+                            sessionId = id,
+                            cwd = config.workingDirectory,
+                            mcpServers = config.mcpServers(),
+                        )
+                    }.onFailure { Log.w(TAG, "resume $id failed: ${it.safeLogType()}") }.getOrNull()
+                }
+                val dshSessionId = resumedId ?: client.newSession(
                     cwd = config.workingDirectory,
                     mcpServers = config.mcpServers(),
                 )
+                // 会话身份变化都要落盘：新会话要记住新 id，续接要更新它见过的那段历史前缀。
+                // 指纹记的是"本轮请求的历史"——下一轮请求的历史一定以它为前缀。
+                record = DshAcpSessionState(
+                    sessionId = dshSessionId,
+                    historyCount = request.history.size,
+                    historyFingerprint = DshAcpSessionStateCodec.fingerprint(
+                        request.history,
+                        request.history.size,
+                    ),
+                    model = config.model,
+                    providerRoute = config.providerRoute,
+                )
                 if (config.providerRoute.isNotBlank() && config.model.isNotBlank()) {
-                    runCatching { client.setModel(sessionId, config.providerRoute, config.model) }
+                    runCatching { client.setModel(dshSessionId, config.providerRoute, config.model) }
                         .onFailure { Log.w(TAG, "set model failed: ${it.safeLogType()}") }
                 }
                 // 会话里选的思考强度要真的传下去，否则 dsh 一直用它自己的默认档（high），
                 // 对话里的「思考」开关就成了摆设。
                 dshEffort(request.config.effectiveReasoningEffort)?.let { effort ->
-                    runCatching { client.setConfigOption(sessionId, CONFIG_REASONING_EFFORT, effort) }
+                    runCatching { client.setConfigOption(dshSessionId, CONFIG_REASONING_EFFORT, effort) }
                         .onSuccess { Log.i(TAG, "reasoning effort: $effort") }
                         .onFailure { Log.w(TAG, "setting reasoning effort failed: ${it.message}") }
                 }
                 round = 1
                 session.emit(
                     AgentEvent.RunStarted(
-                        initialImages = 0,
-                        initialImageBytes = 0,
+                        initialImages = images.size,
+                        initialImageBytes = request.images.sumOf { it.bytes },
                         toolCount = 0,
                         terminalTools = true,
                     )
                 )
                 session.emit(AgentEvent.RoundStarted(round = round, messageCount = 1))
-                promptWithRetry(client, sessionId, promptText)
+                promptWithRetry(client, dshSessionId, promptText, images)
             }
             closeOpenBlock()
             val transcriptMessages = transcript.build()
+            // 记录"下一轮请求里会原样出现的那段前缀"：就是本轮请求的历史。
+            // 下一轮的历史 = 本轮历史 + 本轮提示 + 本轮产出，所以这段前缀一定还在开头。
+            record?.let { persisted -> sessionStore?.save(sessionKey, persisted) }
             session.emit(AgentEvent.RunFinished(round = round, contentChars = contentChars))
             session.complete(
                 AgentRuntimeWire.RunResult(
@@ -266,12 +339,17 @@ internal class DshAcpRuntime(
      * 网关偶发 502 / 连接被重置时，dsh 只发一次请求就放弃；这里补上与 App 内 Agent Loop
      * 一致的重试。只在"请求根本没建立"这类传输层错误上重试，避免重放已经执行过的工具。
      */
-    private suspend fun promptWithRetry(client: DshAcpClient, sessionId: String, text: String) {
+    private suspend fun promptWithRetry(
+        client: DshAcpClient,
+        sessionId: String,
+        text: String,
+        images: List<DshAcpClient.AcpImage> = emptyList(),
+    ) {
         var attempt = 0
         while (true) {
             attempt += 1
             try {
-                client.prompt(sessionId, text)
+                client.prompt(sessionId, text, images)
                 return
             } catch (throwable: Throwable) {
                 val reason = throwable.message.orEmpty()
@@ -284,77 +362,38 @@ internal class DshAcpRuntime(
     }
 
     /**
-     * 每一轮都会新建一个 ACP 会话，dsh 自己不保留跨轮记忆；把已发生的往来压成一段前言
-     * 补进 prompt，否则用户会看到"它以为这是第一次聊天"。
-     */
-    /**
      * 把对话历史压成一段纯文本随提示一起交给 dsh。
+     *
+     * 只在**重开** dsh 会话时调用：首回合、历史分叉（编辑／重新生成）、换模型，或
+     * resume 失败。能续接时 dsh 自己带着完整上下文，不需要这段摘要。
      *
      * 踩过的坑：早先只取 content 非空的历史行，而长会话的尾巴几乎全是工具卡片与思考卡片
      * （这些行的 content 是空的，内容挂在 tool_name／result_summary 上），于是"最近 20 条"
      * 被整批丢掉、注入结果为空——dsh 每次新起进程都从零开始，反复重读文件、轮数暴涨。
-     * 现在按角色分别渲染（含工具调用与工具结果），并从后往前收集到一个字符预算为止。
+     * 现在按角色分别渲染（含工具调用与工具结果），并从后往前收集到预算为止。
+     *
+     * 预算是模型窗口的一个份额（见 [historyBudgetChars]），不是固定字符数。固定 6000 字符
+     * 时，长会话每轮仍然只注入最近十来条被截断的消息：上下文占用永远停在窗口的个位数百分比，
+     * 而 dsh 侧没有读取完整会话的工具，表现就是"聊了很久它还是什么都不记得"。
      */
     private fun promptWithHistory(request: AgentRuntimeWire.RunRequest, text: String): String {
-        val lines = ArrayList<String>()
-        var budget = MAX_HISTORY_TOTAL_CHARS
-        for (message in request.history.asReversed()) {
-            if (lines.size >= MAX_HISTORY_MESSAGES) break
-            val rendered = renderHistoryMessage(message) ?: continue
-            if (rendered.length > budget) break
-            budget -= rendered.length
-            lines.add(rendered)
-        }
+        val budgetChars = historyBudgetChars(request.config.contextWindow)
+        val lines = collectHistoryLines(request.history, budgetChars)
         if (lines.isEmpty()) {
             Log.i(TAG, "history injection empty: history=${request.history.size} msgs")
             return text
         }
-        lines.reverse()
-        Log.i(TAG, "prompt: history=${request.history.size} msgs, injected=${lines.size} lines")
+        Log.i(
+            TAG,
+            "prompt: history=${request.history.size} msgs, injected=${lines.size} lines, " +
+                "chars=${lines.sumOf { it.length }}, budget=$budgetChars",
+        )
         return buildString {
             append("（以下是本次对话之前的往来，仅供你了解上下文，不要重复回复它们）\n")
             append(lines.joinToString("\n"))
             append("\n（历史结束）\n\n")
             append(text)
         }
-    }
-
-    /** 单条历史消息的文本化；没有可读内容时返回 null。 */
-    private fun renderHistoryMessage(message: AgentModelClient.ConversationMessage): String? {
-        val content = message.content.trim()
-        val toolNames = toolCallNames(message)
-        val rendered = when (message.role) {
-            "user" -> content.takeIf { it.isNotEmpty() }?.let { "用户：${it.take(MAX_HISTORY_CHARS_PER_MESSAGE)}" }
-            "assistant" -> buildString {
-                if (content.isNotEmpty()) append("你：${content.take(MAX_HISTORY_CHARS_PER_MESSAGE)}")
-                if (toolNames.isNotEmpty()) {
-                    if (isNotEmpty()) append('\n')
-                    append("你调用了工具：")
-                    append(toolNames.take(MAX_HISTORY_TOOL_NAMES).joinToString("、"))
-                }
-            }.takeIf { it.isNotEmpty() }
-            "tool" -> "工具结果：${content.ifEmpty { "（无输出）" }.take(MAX_HISTORY_CHARS_PER_MESSAGE)}"
-            "system" -> content.takeIf { it.isNotEmpty() }?.let { "系统：${it.take(MAX_HISTORY_CHARS_PER_MESSAGE)}" }
-            else -> null
-        } ?: return null
-        return if (message.contextSummary) "（更早对话的摘要）$rendered" else rendered
-    }
-
-    /** 从工具调用 JSON 里取出工具名，解析失败就当作没有。 */
-    private fun toolCallNames(message: AgentModelClient.ConversationMessage): List<String> {
-        val raw = message.toolCallsJson.trim()
-        if (raw.isEmpty()) return emptyList()
-        return runCatching {
-            val array = org.json.JSONArray(raw)
-            buildList {
-                for (index in 0 until array.length()) {
-                    val call = array.optJSONObject(index) ?: continue
-                    val name = call.optJSONObject("function")?.optString("name").orEmpty()
-                        .ifBlank { call.optString("name") }
-                    if (name.isNotBlank()) add(bareToolName(name))
-                }
-            }
-        }.getOrDefault(emptyList())
     }
 
     /**
@@ -452,15 +491,142 @@ internal class DshAcpRuntime(
         private const val CONFIG_REASONING_EFFORT = "reasoning_effort"
         private const val UNKNOWN_TOOL_LABEL = "准备执行"
         private const val MAX_DISPLAY_COMMAND_CHARS = 600
-        private const val MAX_HISTORY_MESSAGES = 60
-        private const val MAX_HISTORY_CHARS_PER_MESSAGE = 600
-        private const val MAX_HISTORY_TOTAL_CHARS = 6_000
+        private const val MAX_HISTORY_MESSAGES = 240
+        private const val MAX_HISTORY_CHARS_PER_MESSAGE = 2_000
+        private const val DEFAULT_CONTEXT_WINDOW = 128_000
+        private const val HISTORY_WINDOW_PERCENT = 15L
+        private const val MIN_HISTORY_TOTAL_CHARS = 6_000
+        private const val MAX_HISTORY_TOTAL_CHARS = 150_000
         private const val MAX_HISTORY_TOOL_NAMES = 5
         private const val PROMPT_ATTEMPTS = 4
         private const val RETRY_DELAY_MS = 2_000L
         private val RETRYABLE_MARKERS = listOf("API request", "超时（", "Connection", "ECONNRESET", "socket")
         private const val DSH_ENTRY_RELATIVE = "usr/local/lib/node_modules/@deepseek-ai/dsh/lib/bin.js"
         private const val OFFICIAL_ROUTE = "deepseek-official"
+        private const val BASE64_SUFFIX = ";base64"
+        private const val DATA_URL_PREFIX = "data:"
+
+        /** dsh 的 ACP 只接受这四种栅格格式的内联图片，其余一律 invalidParams。 */
+        private val ACP_IMAGE_MIME_TYPES = setOf(
+            "image/png",
+            "image/jpeg",
+            "image/webp",
+            "image/gif",
+        )
+
+        /**
+         * 把 Eta 的图片引用转成 ACP 的 image content block。
+         *
+         * dsh 侧只认**内联的规范 base64**：不接受远程 URL，也不接受带换行或非标准
+         * padding 的 base64（它会用 `Buffer.from(data,'base64').toString('base64')`
+         * 回环比对，不一致就报 "image data must be canonical base64"）。
+         *
+         * 所以这里先解码再以 NO_WRAP 重新编码——无论调用方传进来的是不是规范形式，
+         * 出去的一定是。Eta 的附件编码本来就是 `data:image/jpeg;base64,<NO_WRAP>`，
+         * 这一步实际是恒等变换，但它挡住了未来任何换编码器带来的回归。
+         *
+         * 不支持的引用（远程 URL、content://、裸路径、非白名单 mime）返回 null，
+         * 由调用方按"这张图没带上"处理。
+         */
+        internal fun acpImage(reference: String): DshAcpClient.AcpImage? {
+            if (!reference.startsWith(DATA_URL_PREFIX, ignoreCase = true)) return null
+            val separator = reference.indexOf(',')
+            if (separator <= 0) return null
+            val header = reference.substring(DATA_URL_PREFIX.length, separator)
+            if (!header.endsWith(BASE64_SUFFIX, ignoreCase = true)) return null
+            val mime = header.substring(0, header.length - BASE64_SUFFIX.length).lowercase()
+            if (mime !in ACP_IMAGE_MIME_TYPES) return null
+            val canonical = runCatching {
+                Base64.encodeToString(
+                    Base64.decode(reference.substring(separator + 1), Base64.DEFAULT),
+                    Base64.NO_WRAP,
+                )
+            }.getOrNull() ?: return null
+            if (canonical.isEmpty()) return null
+            return DshAcpClient.AcpImage(mimeType = mime, data = canonical)
+        }
+
+        /**
+         * 历史注入的字符预算：模型窗口的一个份额，而不是固定字符数。
+         *
+         * 1 字符按 1 token 保守估算（中文实际就是 1:1，英文只会更省），把窗口的 15% 留给历史，
+         * 其余留给本轮的思考、工具输出和回答——与 AgentContextBudget 的
+         * TRIGGER_RATIO(0.85) / RECENT_RATIO(0.20) 是同一套口径。上限 150k 字符是为了压住
+         * 单轮 prefill：注入的历史每轮都在滑动，前缀缓存命中不到，不能无限放大。
+         * 窗口未知时按 128K 处理，并按上下限夹住。
+         */
+        internal fun historyBudgetChars(contextWindow: Int?): Int {
+            val window = contextWindow?.takeIf { it > 0 } ?: DEFAULT_CONTEXT_WINDOW
+            return (window.toLong() * HISTORY_WINDOW_PERCENT / 100)
+                .coerceIn(MIN_HISTORY_TOTAL_CHARS.toLong(), MAX_HISTORY_TOTAL_CHARS.toLong())
+                .toInt()
+        }
+
+        /**
+         * 从最新往回收集可注入的历史行，直到用完预算，返回时恢复成从旧到新。
+         *
+         * 单条渲染超过剩余预算时停止而不是跳过：继续往前只会拿到更旧、更小的消息，
+         * 拼出来的一段会缺中间环节，比少注入更糟。
+         */
+        internal fun collectHistoryLines(
+            history: List<AgentModelClient.ConversationMessage>,
+            budgetChars: Int,
+            maxMessages: Int = MAX_HISTORY_MESSAGES,
+            maxCharsPerMessage: Int = MAX_HISTORY_CHARS_PER_MESSAGE,
+        ): List<String> {
+            val lines = ArrayList<String>()
+            var budget = budgetChars
+            for (message in history.asReversed()) {
+                if (lines.size >= maxMessages) break
+                val rendered = renderHistoryMessage(message, maxCharsPerMessage) ?: continue
+                if (rendered.length > budget) break
+                budget -= rendered.length
+                lines.add(rendered)
+            }
+            lines.reverse()
+            return lines
+        }
+
+        /** 单条历史消息的文本化；没有可读内容时返回 null。 */
+        private fun renderHistoryMessage(
+            message: AgentModelClient.ConversationMessage,
+            maxCharsPerMessage: Int,
+        ): String? {
+            val content = message.content.trim()
+            val toolNames = toolCallNames(message)
+            val rendered = when (message.role) {
+                "user" -> content.takeIf { it.isNotEmpty() }?.let { "用户：${it.take(maxCharsPerMessage)}" }
+                "assistant" -> buildString {
+                    if (content.isNotEmpty()) append("你：${content.take(maxCharsPerMessage)}")
+                    if (toolNames.isNotEmpty()) {
+                        if (isNotEmpty()) append('\n')
+                        append("你调用了工具：")
+                        append(toolNames.take(MAX_HISTORY_TOOL_NAMES).joinToString("、"))
+                    }
+                }.takeIf { it.isNotEmpty() }
+                "tool" -> "工具结果：${content.ifEmpty { "（无输出）" }.take(maxCharsPerMessage)}"
+                "system" -> content.takeIf { it.isNotEmpty() }?.let { "系统：${it.take(maxCharsPerMessage)}" }
+                else -> null
+            } ?: return null
+            return if (message.contextSummary) "（更早对话的摘要）$rendered" else rendered
+        }
+
+        /** 从工具调用 JSON 里取出工具名，解析失败就当作没有。 */
+        private fun toolCallNames(message: AgentModelClient.ConversationMessage): List<String> {
+            val raw = message.toolCallsJson.trim()
+            if (raw.isEmpty()) return emptyList()
+            return runCatching {
+                val array = org.json.JSONArray(raw)
+                buildList {
+                    for (index in 0 until array.length()) {
+                        val call = array.optJSONObject(index) ?: continue
+                        val name = call.optJSONObject("function")?.optString("name").orEmpty()
+                            .ifBlank { call.optString("name") }
+                        if (name.isNotBlank()) add(bareToolName(name))
+                    }
+                }
+            }.getOrDefault(emptyList())
+        }
 
         /**
          * Linux 环境里已经装好 dsh 时才启用 ACP 内核；否则返回 null 让上游回退到原有 Agent Loop。
@@ -485,11 +651,16 @@ internal class DshAcpRuntime(
                 apiKey = modelConfig.apiKey,
                 baseUrl = modelConfig.baseUrl,
             ) ?: return null
-            return DshAcpRuntime(resolved)
+            return DshAcpRuntime(
+                config = resolved,
+                sessionStore = runCatching { DshAcpSessionStore.create(context) }
+                    .onFailure { Log.w(TAG, "session store unavailable: ${it.safeLogType()}") }
+                    .getOrNull(),
+            )
         }
 
         /**
-         * Eda 只有 dsh 一个内核：运行时或模型配置不可用时给出明确原因，让上层直接报错，
+         * Heta 只有 dsh 一个内核：运行时或模型配置不可用时给出明确原因，让上层直接报错，
          * 不再静默回退到旧内核（旧内核会把整段历史全量重发，实测 175k tokens／轮、单任务
          * 50 分钟，界面上完全看不出降级）。
          */
@@ -540,8 +711,8 @@ internal class DshAcpRuntime(
 /**
  * 把 dsh 的 ACP 流（思考／正文／工具调用／工具结果）重新拼回 Eta 的历史消息。
  *
- * dsh 每次提问都是一次性的 ACP 会话，不会把这一轮做过什么写回 Eta；
- * 没有这个回写，checkpoint 里就只剩用户消息，下一轮 dsh 从零开始（反复重读、轮数暴涨）。
+ * Eta 的 UI、checkpoint 与历史注入都只认 Eta 自己的会话；dsh 的会话是另一份账
+ * （用于续接上下文），不会写回 Eta。没有这个回写，checkpoint 里就只剩用户消息。
  * 形态对齐旧内核：一段 assistant 输出（可带 tool_calls）+ 若干条 tool 结果。
  */
 private class DshTranscriptBuilder(private val runId: String) {

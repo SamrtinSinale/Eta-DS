@@ -302,7 +302,7 @@ internal class AgentRuntimeService : Service(), LifecycleOwner, SavedStateRegist
                                 is AgentRuntimeImageTransfer.ImageTransferException ->
                                     throwable.message ?: "Agent Runtime 无法读取图片"
                                 is RuntimeConfigUnavailableException ->
-                                    "请先在 Eda 中配置可用的模型"
+                                    "请先在 Heta 中配置可用的模型"
                                 else -> "Agent Runtime 无法准备请求"
                             },
                             replyTo,
@@ -332,7 +332,7 @@ internal class AgentRuntimeService : Service(), LifecycleOwner, SavedStateRegist
         if (!executionHeld && !allowBoundFallback) {
             session.complete(AgentRuntimeWire.RunResult(
                 runId = request.runId, ok = false, content = "",
-                error = "无法启动后台执行服务，请返回 Eda 后重试",
+                error = "无法启动后台执行服务，请返回 Heta 后重试",
             )) {}
             return
         }
@@ -381,7 +381,7 @@ internal class AgentRuntimeService : Service(), LifecycleOwner, SavedStateRegist
             return
         }
         if (request.operation == AgentRuntimeWire.OP_CHAT) {
-            // Eda 的对话回合只有 dsh 一个内核：不可用时直接失败，绝不静默回退到旧内核
+            // Heta 的对话回合只有 dsh 一个内核：不可用时直接失败，绝不静默回退到旧内核
             // （旧内核会把整段历史全量重发，实测 175k tokens/轮、单任务 50 分钟）。
             val reason = io.github.mangi.eta.agent.dsh.DshAcpRuntime.unavailableReason(this, request)
             Log.w("AgentRuntimeService", "dsh unavailable, failing run: " + reason)

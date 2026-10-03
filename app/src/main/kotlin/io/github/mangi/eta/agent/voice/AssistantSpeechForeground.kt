@@ -11,8 +11,8 @@ import io.github.mangi.eta.R
 
 /** Overlay 不等同于前台 Activity；只在可见浮窗采集或播放音频期间提升服务类型。 */
 internal class AssistantSpeechForeground(private val service: Service) {
-    fun recording() = start(ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE, "Eda 正在聆听")
-    fun playback() = start(ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK, "Eda 正在朗读")
+    fun recording() = start(ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE, "Heta 正在聆听")
+    fun playback() = start(ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK, "Heta 正在朗读")
 
     private fun start(type: Int, title: String) {
         service.getSystemService(NotificationManager::class.java).createNotificationChannel(

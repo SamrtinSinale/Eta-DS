@@ -7,4 +7,8 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <!-- 品牌蓝：启动图标底色，与 drawable-nodpi/ic_launcher_foreground.png 配套。
+         取自品牌图源文件蓝底的实测中位值（#0059FF），foreground 的白 H 直接叠在它上面。
+         这个色只被 ic_launcher_background 引用，不影响 App 主题。 -->
+    <color name="brand_blue">#FF0059FF</color>
 </resources>

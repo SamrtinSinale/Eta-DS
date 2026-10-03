@@ -20,7 +20,8 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * 协议要点（已实测）：
  * - 换行分隔的 JSON-RPC 2.0，标准输出专供协议帧，日志走标准错误
- * - initialize / session/new / session/set_config_option / session/prompt
+ * - initialize / session/new / session/resume / session/set_config_option / session/prompt
+ * - dsh 自己会把会话持久化，`session/resume` 能带着完整上下文接着聊（不必每轮重放历史）
  * - 会话过程中的 `session/update` 通知承载流式内容：
  *   agent_message_chunk、agent_thought_chunk、tool_call、tool_call_update、usage_update
  * - prompt 请求在轮次结束时返回 stopReason(如 end_turn)
@@ -62,6 +63,18 @@ internal class DshAcpClient(
     var sessionId: String? = null
         private set
 
+    /**
+     * dsh 在 `initialize` 里声明本连接是否接受内联图片。
+     *
+     * 它是两条与运算：附件存储支持栅格格式，**且**当前模型声明了 image 输入。
+     * 后者取决于 dsh 自己的模型目录——自定义网关的模型名不在目录里时会被当成纯文本，
+     * 于是这里为 false，此时发送 image block 会被 dsh 以
+     * `inline image prompts were not advertised by this connection` 拒绝。
+     */
+    @Volatile
+    var imagePromptEnabled: Boolean = false
+        private set
+
     val running: Boolean get() = process?.isAlive == true
 
     fun start() {
@@ -79,13 +92,20 @@ internal class DshAcpClient(
         }
     }
 
-    suspend fun initialize(): JSONObject = request(
-        "initialize",
-        JSONObject()
-            .put("protocolVersion", PROTOCOL_VERSION)
-            .put("clientCapabilities", JSONObject()),
-        timeoutMs = INIT_TIMEOUT_MS,
-    )
+    suspend fun initialize(): JSONObject {
+        val result = request(
+            "initialize",
+            JSONObject()
+                .put("protocolVersion", PROTOCOL_VERSION)
+                .put("clientCapabilities", JSONObject()),
+            timeoutMs = INIT_TIMEOUT_MS,
+        )
+        imagePromptEnabled = result
+            .optJSONObject("agentCapabilities")
+            ?.optJSONObject("promptCapabilities")
+            ?.optBoolean("image") == true
+        return result
+    }
 
     suspend fun newSession(
         cwd: String,
@@ -99,6 +119,27 @@ internal class DshAcpClient(
             ?: throw DshAcpException("session/new 未返回 sessionId")
         sessionId = id
         return id
+    }
+
+    /**
+     * 续接一个已持久化的 dsh 会话。
+     *
+     * 约束（dsh 侧实测）：会话必须已落盘、不是 subagent、且 [cwd] 与建会话时一致；
+     * 不满足时 dsh 回 invalidParams，调用方应回退到 [newSession]。
+     */
+    suspend fun resumeSession(
+        sessionId: String,
+        cwd: String,
+        mcpServers: List<JSONObject> = emptyList(),
+    ): String {
+        val params = JSONObject()
+            .put("sessionId", sessionId)
+            .put("cwd", cwd)
+            .put("mcpServers", JSONArray().also { array -> mcpServers.forEach(array::put) })
+        val result = request(METHOD_SESSION_RESUME, params, timeoutMs = SESSION_TIMEOUT_MS)
+        val resumed = result.optString("sessionId").takeIf { it.isNotBlank() } ?: sessionId
+        this.sessionId = resumed
+        return resumed
     }
 
     /** 设置会话广告出来的任意配置项（模型、思考强度……）。 */
@@ -124,14 +165,43 @@ internal class DshAcpClient(
     /**
      * 发送一轮提示；[onUpdate] 之外的流式内容通过 [Listener] 回调。
      * 返回终止原因（如 end_turn / max_tokens / cancelled）。
+     *
+     * [images] 按 wire order 夹在文本之后。dsh 侧要求 data 是**规范 base64**
+     * （标准字母表、正确 padding、不得含换行），mimeType 只能是 png/jpeg/webp/gif；
+     * 不合规会在准入阶段直接回 invalidParams。
      */
-    suspend fun prompt(sessionId: String, text: String, timeoutMs: Long = PROMPT_TIMEOUT_MS): String {
+    suspend fun prompt(
+        sessionId: String,
+        text: String,
+        images: List<AcpImage> = emptyList(),
+        timeoutMs: Long = PROMPT_TIMEOUT_MS,
+    ): String {
+        val blocks = JSONArray()
+        // dsh 只要求「图片或非空文本」至少有一个，顺序不影响语义；
+        // 文本放前面更贴近阅读顺序，也方便日志里肉眼核对。
+        if (text.isNotEmpty()) {
+            blocks.put(JSONObject().put("type", "text").put("text", text))
+        }
+        images.forEach { image ->
+            blocks.put(
+                JSONObject()
+                    .put("type", "image")
+                    .put("mimeType", image.mimeType)
+                    .put("data", image.data)
+            )
+        }
         val params = JSONObject()
             .put("sessionId", sessionId)
-            .put("prompt", JSONArray().put(JSONObject().put("type", "text").put("text", text)))
+            .put("prompt", blocks)
         val result = request("session/prompt", params, timeoutMs = timeoutMs)
         return result.optString("stopReason").ifBlank { "end_turn" }
     }
+
+    /** 一条已编码好的内联图片。[data] 必须是规范 base64。 */
+    internal data class AcpImage(
+        val mimeType: String,
+        val data: String,
+    )
 
     suspend fun cancel(sessionId: String) {
         runCatching {
@@ -309,6 +379,7 @@ internal class DshAcpClient(
         private const val JSONRPC = "2.0"
         private const val PROTOCOL_VERSION = 1
         private const val METHOD_SESSION_UPDATE = "session/update"
+        private const val METHOD_SESSION_RESUME = "session/resume"
         private const val METHOD_REQUEST_PERMISSION = "session/request_permission"
         private const val METHOD_SET_CONFIG_OPTION = "session/set_config_option"
         private const val ALLOW_ONCE = "allow-once"

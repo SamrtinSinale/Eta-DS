@@ -167,7 +167,7 @@ internal class McpHttpClient(
                 .put("capabilities", JSONObject())
                 .put(
                     "clientInfo",
-                    JSONObject().put("name", "Eda").put("version", CLIENT_VERSION),
+                    JSONObject().put("name", "Heta").put("version", CLIENT_VERSION),
                 ),
             protocolVersion = McpProtocolMode.LEGACY,
             sessionId = null,
@@ -277,7 +277,7 @@ internal class McpHttpClient(
                     .put("io.modelcontextprotocol/protocolVersion", protocolVersion)
                     .put(
                         "io.modelcontextprotocol/clientInfo",
-                        JSONObject().put("name", "Eda").put("version", CLIENT_VERSION),
+                        JSONObject().put("name", "Heta").put("version", CLIENT_VERSION),
                     )
                     .put("io.modelcontextprotocol/clientCapabilities", JSONObject()),
             )

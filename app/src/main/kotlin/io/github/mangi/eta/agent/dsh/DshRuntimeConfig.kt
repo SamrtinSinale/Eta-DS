@@ -51,6 +51,12 @@ internal data class DshRuntimeConfig(
      *
      * ACP profile 的默认模型取自内置目录，而自定义网关通常只放行自己的模型名
      * （例如 `cn:deepseek-v4.1-flash`），不覆盖就会在服务端被判白名单拒绝。
+     *
+     * 这里还要顺带修一件事：dsh 的**图片能力是按模型目录里的 `inputModalities` 判定的**。
+     * 自定义网关的模型名不在目录里，dsh 就按未知 id 回落成纯文本，于是 `initialize`
+     * 报 `promptCapabilities.image=false`，任何图片都会被
+     * `inline image prompts were not advertised by this connection` 顶回来。
+     * 模型本身能看图（同一个模型走 Eta 原生路径时图片是通的），缺的只是这句声明。
      */
     private fun writeProfileOverlay(): String? {
         if (model.isBlank()) return null
@@ -59,6 +65,7 @@ internal data class DshRuntimeConfig(
             overlay.parentFile?.mkdirs()
             overlay.writeText(
                 buildString {
+                    append(modelCatalogOverlay())
                     append("- id: acp\n")
                     append("  config:\n")
                     append("    provider: ")
@@ -75,6 +82,25 @@ internal data class DshRuntimeConfig(
         }.getOrElse { throwable ->
             Log.w(TAG, "profile overlay write failed", throwable)
             null
+        }
+    }
+
+    /**
+     * 生成 `llm-deepseek` 的模型目录覆盖。
+     *
+     * `config.models` 是**整表替换**而不是追加，所以内置的四项必须原样抄一遍，
+     * 否则用户在 dsh 侧就只剩一个模型可选。内置项里两个带 `inputModalities: [text, image]`，
+     * 保持它们原本的能力声明；然后按需把用户配置的模型补进去并声明图片输入。
+     */
+    private fun modelCatalogOverlay(): String = buildString {
+        append("- id: llm-deepseek\n")
+        append("  config:\n")
+        append("    models:\n")
+        append(BUILTIN_MODEL_CATALOG)
+        if (BUILTIN_MODEL_IDS.none { it == model }) {
+            append("      - id: ").append(JSONObject.quote(model)).append('\n')
+            append("        contextWindow: ").append(DEFAULT_CONTEXT_WINDOW).append('\n')
+            append("        inputModalities: [text, image]\n")
         }
     }
 
@@ -152,14 +178,14 @@ internal data class DshRuntimeConfig(
         val lines = ArrayList<String>()
         lines += "Your working directory is {{cwd}}."
         lines += ""
-        lines += "技能库：dsh 自带技能在 /root/.dsh/skills；Eda 技能库在 $SKILLS_IN_ROOT（每个技能是 <名字>/SKILL.md，由 Eda App 管理）。"
+        lines += "技能库：dsh 自带技能在 /root/.dsh/skills；Heta 技能库在 $SKILLS_IN_ROOT（每个技能是 <名字>/SKILL.md，由 Heta App 管理）。"
         lines += "任务与某个技能相符时，先读对应技能的 SKILL.md 再执行；需要新技能时用 skills_list_curated / skills_inspect_github 找到，"
-        lines += "再通过 skills_install_from_github 安装——装好后会同步进 Eda 技能库并自动可用。"
+        lines += "再通过 skills_install_from_github 安装——装好后会同步进 Heta 技能库并自动可用。"
         val skills = skillIndex()
         if (skills.isEmpty()) {
             lines += "当前技能库为空。"
         } else {
-            lines += "Eda 技能库现有技能："
+            lines += "Heta 技能库现有技能："
             skills.take(MAX_SKILL_LINES).forEach { (name, description) ->
                 lines += if (description.isBlank()) "- $name" else "- $name：$description"
             }
@@ -205,14 +231,50 @@ internal data class DshRuntimeConfig(
             "/system/bin:/system/xbin:/product/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
         private const val ENV_API_KEY = "DEEPSEEK_API_KEY"
         private const val ENV_BASE_URL = "DEEPSEEK_BASE_URL"
-        private const val MCP_SERVER_NAME = "eda"
+        private const val MCP_SERVER_NAME = "heta"
         private const val MCP_TRANSPORT_HTTP = "http"
-        private const val OVERLAY_RELATIVE = "opt/dsh/eda-run-overlay.patch.yml"
-        private const val OVERLAY_IN_ROOT = "/opt/dsh/eda-run-overlay.patch.yml"
+        private const val OVERLAY_RELATIVE = "opt/dsh/heta-run-overlay.patch.yml"
+        private const val OVERLAY_IN_ROOT = "/opt/dsh/heta-run-overlay.patch.yml"
         private const val SKILLS_TARGET_REL = "root/.agents/skills"
         private const val SKILLS_IN_ROOT = "/root/.agents/skills"
         private const val MAX_SKILL_LINES = 40
         private const val MAX_SKILL_DESCRIPTION = 160
+
+        /** dsh 内置模型目录的窗口大小（`DEFAULT_CONTEXT_WINDOW` 在 dsh 侧也是 1e6）。 */
+        private const val DEFAULT_CONTEXT_WINDOW = 1_000_000
+
+        /**
+         * dsh 内置的 `deepseek-official` 模型目录，逐项抄自
+         * `@deepseek-ai/dsh-llm-deepseek` 的 `DEFAULT_MODELS`。
+         *
+         * 必须整份重写：`config.models` 是整表替换，只写自己那一项会把内置模型全挤掉。
+         * dsh 升级换了目录时这里会滞后，但滞后只影响"目录里多/少一个可选模型"，
+         * 不影响用户自己那个模型的图片能力声明。
+         */
+        private val BUILTIN_MODEL_CATALOG = """
+            |      - id: "deepseek-flash"
+            |        name: "DeepSeek-V41-Flash"
+            |        contextWindow: 1000000
+            |        inputModalities: [text, image]
+            |      - id: "deepseek-v4-flash"
+            |        name: "DeepSeek-V4-Flash"
+            |        contextWindow: 1000000
+            |      - id: "deepseek-v4-pro"
+            |        name: "DeepSeek-V4-Pro"
+            |        contextWindow: 1000000
+            |      - id: "deepseek-v4-flash-vision-exp"
+            |        name: "DeepSeek-V4-Flash-Vision-Exp"
+            |        contextWindow: 1000000
+            |        inputModalities: [text, image]
+            |
+        """.trimMargin()
+
+        private val BUILTIN_MODEL_IDS = listOf(
+            "deepseek-flash",
+            "deepseek-v4-flash",
+            "deepseek-v4-pro",
+            "deepseek-v4-flash-vision-exp",
+        )
 
         /**
          * 内置运行时尚未展开时返回 null，让上游回退到原有 Agent Loop。

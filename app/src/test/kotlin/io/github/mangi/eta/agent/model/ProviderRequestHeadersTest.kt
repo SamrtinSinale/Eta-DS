@@ -16,7 +16,7 @@ class ProviderRequestHeadersTest {
         val next = headers("https://opencode.ai/zen/go/v1", "conversation-2")
         assertEquals(first["x-opencode-session"], retry["x-opencode-session"])
         assertNotEquals(first["x-opencode-session"], next["x-opencode-session"])
-        assertEquals("Eda", first["User-Agent"])
+        assertEquals("Heta", first["User-Agent"])
     }
 
     @Test

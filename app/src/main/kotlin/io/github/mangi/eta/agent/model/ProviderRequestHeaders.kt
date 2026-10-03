@@ -12,7 +12,7 @@ internal object ProviderRequestHeaders {
         customHeaders: List<CustomHeader>,
         sessionId: String = UUID.randomUUID().toString(),
     ) {
-        builder.set("User-Agent", "Eda")
+        builder.set("User-Agent", "Heta")
         CustomHeaderFilter.mergeInto(builder, customHeaders)
         if (baseUrl.toHttpUrlOrNull()?.host == "opencode.ai") {
             // 会话头由 Runtime 持有，避免固定自定义值把所有对话合并到同一路由。
