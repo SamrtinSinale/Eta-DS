@@ -7,8 +7,10 @@
 # 范围（**故意是子集**，不是整个 app）：
 #   覆盖：core/ 里的递归删护栏（SafeTreeDelete）、让路残骸回收（StaleRetirementSweeper）、
 #         日志（AgentLogger / LogThrottle / ModuleConfig）、Android 终端路径常量
-#         （AndroidTerminalPaths）、身份常量（AgentIdentity）。
-#   不覆盖：agent/model/AgentPromptBuilder、agent/dsh/**、UI —— 它们会牵出 Room/AndroidX/
+#         （AndroidTerminalPaths）、身份常量（AgentIdentity），以及 agent/dsh 里那两个
+#         **零 Android 依赖**的文件（DshPatchDocument / DshProfileStore，补丁层读写）。
+#         后两个连单测都能本地跑：见 scripts/test-local-dsh.sh。
+#   不覆盖：agent/model/AgentPromptBuilder、agent/dsh 的其余文件、UI —— 它们会牵出 Room/AndroidX/
 #         okhttp/kotlinx 等一大堆 jar，本地追不划算，交回 CI。改动落在那里时，本脚本仍能挡下
 #         "语法/同批文件缺失"这类错，但挡不住外部 API 误用。
 #
@@ -55,6 +57,8 @@ FILES=(
   "$B/core/ModuleConfig.kt"
   "$B/agent/terminal/AndroidTerminalPaths.kt"
   "$B/agent/model/AgentIdentity.kt"
+  "$B/agent/dsh/DshPatchDocument.kt"
+  "$B/agent/dsh/DshProfileStore.kt"
 )
 
 # AGP 生成的 BuildConfig 在本地不存在，给个桩（只用到 APPLICATION_ID；值与 applicationId 一致）。
