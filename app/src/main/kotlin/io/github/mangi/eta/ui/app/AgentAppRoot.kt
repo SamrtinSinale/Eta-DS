@@ -134,7 +134,6 @@ fun AgentAppRoot(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 RootAccess.refresh(context)
-                appViewModel.refreshDshWeb()
                 agentState.refreshPermissionHealth()
                 agentState.refreshRuntimeResults()
             }
@@ -237,26 +236,7 @@ fun AgentAppRoot(
             onSearchConversations = { query -> agentState.updateSearchQuery(query) },
             onNewConversation = { createConversation() },
             onOpenTerminal = { pushRoute(AppRoute.Terminal) },
-            onLaunchDshWeb = {
-                requestExecutionNotifications()
-                if (appViewModel.dshWebState.phase != DshWebPhase.NOT_INSTALLED) {
-                    appViewModel.launchDshWeb { result ->
-                        if (result is DshWebLaunchResult.Failed) {
-                            Toast.makeText(
-                                context,
-                                result.message(context),
-                                Toast.LENGTH_LONG,
-                            ).show()
-                        }
-                    }
-                } else {
-                    pushRoute(AppRoute.LinuxEnvironment)
-                }
-            },
-            dshWebLabel = appViewModel.dshWebState.actionLabel(context),
-            canStopDshWeb = appViewModel.dshWebState.canStop,
-            onStopDshWeb = appViewModel::stopDshWeb,
-            onRefreshDshWeb = appViewModel::refreshDshWeb,
+            onOpenLinuxEnvironment = { pushRoute(AppRoute.LinuxEnvironment) },
             onOpenBrowser = { pushRoute(AppRoute.Browser) },
             onSelectConversation = { conversationId -> selectConversation(conversationId) },
             onConversationRename = { conversation ->

@@ -67,6 +67,33 @@ internal object LinuxPackageProfiles {
             ),
         ),
     )
+    /**
+     * Python 的包管理器。基础环境与 Python profile 都不带 pip：Python profile 装的是
+     * uv 托管的解释器（`/usr/local/bin/python3`），它自带 uv 但没有 pip。
+     *
+     * 关键是 pip 必须装进**同一个解释器**——系统包（Alpine 的 py3-pip / Debian 的
+     * python3-pip）会把包装到 `/usr/bin/python3`，而 PATH 上 `/usr/local/bin` 优先，
+     * `pip install` 装的东西 `python3` 根本看不见。所以这里用 uv 往 uv 的解释器里装。
+     *
+     * 两个必须带的参数，缺一个都装不上：
+     * - `--break-system-packages`：uv 托管的解释器带 PEP 668 的 `EXTERNALLY-MANAGED`
+     *   标记，不加这个 uv 会直接拒绝（"interpreter ... is externally managed"）。
+     * - `--link-mode=copy`：proot 里 uv 默认从缓存硬链接进 site-packages 会
+     *   `Operation not permitted (os error 1)`，改成复制。
+     */
+    private const val PIP_INSTALL_SCRIPT =
+        "uv pip install --python \"${'$'}(command -v python3)\" --break-system-packages --link-mode=copy pip setuptools wheel"
+
+    val PIP = LinuxPackageProfile(
+        id = "pip",
+        markerName = AlpineEnvironmentPaths.PIP_TOOLS_MARKER,
+        revision = AlpineEnvironmentPaths.PIP_TOOLS_REVISION,
+        dependsOn = PYTHON,
+        specs = mapOf(
+            LinuxDistribution.ALPINE to LinuxPackageSpec(setupScript = PIP_INSTALL_SCRIPT),
+            LinuxDistribution.DEBIAN to LinuxPackageSpec(setupScript = PIP_INSTALL_SCRIPT),
+        ),
+    )
     val NODE = LinuxPackageProfile(
         id = "node",
         markerName = AlpineEnvironmentPaths.NODE_TOOLS_MARKER,
@@ -103,6 +130,9 @@ internal object LinuxPackageProfiles {
      * 可选原生扩展由 npm 按平台安装。始终安装最新正式版（升级重装即可）；
      * --prefix /usr/local 让 dsh 进入 PATH 首位，与 Node 归档自身的 prefix 无关。
      * 国内镜像优先，官方 registry 兜底。
+     *
+     * 注意：App 内对话用的是**随包**那份 dsh（见 DshRuntimeInstaller），这里装的是给
+     * 终端用的第二份，两者互不影响。
      */
     private const val DSH_INSTALL_SCRIPT =
         "npm install -g --prefix /usr/local --allow-scripts=@deepseek-ai/dsh-subprocess-local,koffi,node-pty,@google/genai,protobufjs --registry=https://registry.npmmirror.com " +
@@ -119,7 +149,8 @@ internal object LinuxPackageProfiles {
             LinuxDistribution.DEBIAN to LinuxPackageSpec(setupScript = DSH_INSTALL_SCRIPT),
         ),
     )
-    val ALL = listOf(PYTHON, NODE, SSH, DSH)
+
+    val ALL = listOf(PYTHON, PIP, NODE, SSH, DSH)
 }
 
 internal fun linuxPackageProfileReady(rootfs: File, profile: LinuxPackageProfile): Boolean {
@@ -212,7 +243,7 @@ internal class LinuxPackageProfileInstaller(
         val activateCommand = buildString {
             append("set -e\n")
             spec.setupScript?.let { script -> append(script).append('\n') }
-            if (profile == LinuxPackageProfiles.DSH) append("dsh --version >/dev/null\ndsh web --help >/dev/null\n")
+            if (profile == LinuxPackageProfiles.DSH) append("dsh --version >/dev/null\n")
             append("cat > /").append(profile.markerName).append(" <<'ETA_PROFILE_EOF'\n")
             append("profile=").append(profile.revision).append('\n')
             append("ETA_PROFILE_EOF\n")

@@ -48,10 +48,7 @@ import io.github.mangi.eta.agent.terminal.SharedFolderMounts
 import io.github.mangi.eta.agent.terminal.terminalEnvironment
 import io.github.mangi.eta.core.AndroidAgentLogger
 import io.github.mangi.eta.data.repository.LinuxEnvironmentSettingsRepository
-import io.github.mangi.eta.ui.app.DshWebLaunchResult
-import io.github.mangi.eta.ui.app.DshWebLauncher
 import io.github.mangi.eta.ui.app.launchForegroundExecution
-import io.github.mangi.eta.ui.app.message
 import io.github.mangi.eta.ui.app.rememberDeviceCapabilities
 import io.github.mangi.eta.ui.app.rememberExecutionNotificationRequest
 import io.github.mangi.eta.ui.components.EtaArrowPreference
@@ -74,6 +71,7 @@ private enum class InstallTarget {
     TOOLS,
     APK_ANALYSIS,
     PYTHON,
+    PIP,
     NODE,
     SSH,
     DSH,
@@ -98,6 +96,13 @@ private val packageProfileUis = listOf(
         readyRes = R.string.linux_python_tools_ready,
         debianSummaryRes = R.string.linux_python_tools_summary_debian,
         debianReadyRes = R.string.linux_python_tools_ready_debian,
+    ),
+    PackageProfileUi(
+        target = InstallTarget.PIP,
+        profile = LinuxPackageProfiles.PIP,
+        titleRes = R.string.linux_pip_tools,
+        summaryRes = R.string.linux_pip_tools_summary,
+        readyRes = R.string.linux_pip_tools_ready,
     ),
     PackageProfileUi(
         target = InstallTarget.NODE,
@@ -173,28 +178,6 @@ internal fun LinuxEnvironmentScreen(
         mutableStateOf(apkAnalysisInstaller.isReady())
     }
     var apkAnalysisProgress by remember { mutableStateOf<ApkAnalysisInstallProgress?>(null) }
-    var dshWebLaunching by remember { mutableStateOf(false) }
-    var dshWebRunning by remember(selectedDistribution, backend) { mutableStateOf(false) }
-    val dshWebLauncher = remember(appContext) {
-        DshWebLauncher(
-            context = appContext,
-            daemonSupervisor = DetachedTaskSupervisor(
-                logger = AndroidAgentLogger,
-                recordsFile = DetachedTaskSupervisor.defaultRecordsFile(appContext),
-                linuxRootfsPathProvider = { environment ->
-                    environment.linuxDistribution?.let { distribution ->
-                        LinuxEnvironmentPaths.rootfsDir(appContext, distribution).absolutePath
-                    }
-                },
-                linuxSharedMountsProvider = { SharedFolderMounts.current() },
-            ),
-        )
-    }
-    LaunchedEffect(selectedDistribution, backend, dshWebLaunching) {
-        if (!dshWebLaunching) {
-            dshWebRunning = dshWebLauncher.status(selectedDistribution.terminalEnvironment).running
-        }
-    }
     val selectedBaseReady = when (selectedDistribution) {
         LinuxDistribution.ALPINE -> status.state != AlpineEnvironmentState.NOT_INSTALLED
         LinuxDistribution.DEBIAN -> debianStatus.state != DebianEnvironmentState.NOT_INSTALLED
@@ -277,21 +260,6 @@ internal fun LinuxEnvironmentScreen(
         }
     }
 
-    /** dsh 就绪后按钮变为启动 Web UI：守护任务常驻 dsh web，解析地址后拉起浏览器。 */
-    fun launchDshWeb() {
-        if (dshWebLaunching || requiresRoot) return
-        requestExecutionNotifications()
-        dshWebLaunching = true
-        resultMessage = null
-        coroutineScope.launch {
-            val result = dshWebLauncher.launch(selectedDistribution.terminalEnvironment)
-            dshWebLaunching = false
-            if (result is DshWebLaunchResult.Failed) {
-                resultMessage = result.message(context)
-            }
-        }
-    }
-
     MiuixScaffoldPage(
         title = stringResource(R.string.ui_linux_tool_environment_314d22),
         onBack = onBack,
@@ -315,7 +283,6 @@ internal fun LinuxEnvironmentScreen(
                 mode = backend.displayName(),
                 summary = when {
                     requiresRoot -> stringResource(R.string.capability_linux_root_lost)
-                    dshWebLaunching -> stringResource(R.string.linux_dsh_web_starting)
                     busyTarget != null -> activeProgress ?: stringResource(R.string.linux_installing)
                     selectedToolsReady -> stringResource(R.string.linux_environment_tools_ready)
                     selectedBaseReady -> stringResource(R.string.linux_environment_base_ready)
@@ -327,7 +294,7 @@ internal fun LinuxEnvironmentScreen(
                         },
                     )
                 },
-                busy = busyTarget != null || dshWebLaunching,
+                busy = busyTarget != null,
                 message = resultMessage,
                 actionText = when {
                     requiresRoot -> stringResource(R.string.capability_enhancements)
@@ -336,7 +303,7 @@ internal fun LinuxEnvironmentScreen(
                     selectedBaseReady -> stringResource(R.string.linux_install_base_tools)
                     else -> stringResource(R.string.linux_install_base)
                 },
-                actionEnabled = busyTarget == null && !dshWebLaunching,
+                actionEnabled = busyTarget == null,
                 onAction = {
                     if (requiresRoot) onNavigate(AppRoute.SystemEnhance)
                     else if (selectedBaseReady) installTools() else installBase()
@@ -349,15 +316,15 @@ internal fun LinuxEnvironmentScreen(
                 distribution = selectedDistribution,
                 backend = backend,
                 rootGranted = capabilities.root.isGranted,
-                enabled = busyTarget == null && !dshWebLaunching,
+                enabled = busyTarget == null,
                 onDistributionSelected = { distribution ->
-                    if (busyTarget == null && !dshWebLaunching && distribution != selectedDistribution) {
+                    if (busyTarget == null && distribution != selectedDistribution) {
                         resultMessage = null
                         coroutineScope.launch { LinuxEnvironmentSettingsRepository.select(distribution) }
                     }
                 },
                 onBackendSelected = { selectedBackend ->
-                    if (busyTarget == null && !dshWebLaunching && selectedBackend != backend &&
+                    if (busyTarget == null && selectedBackend != backend &&
                         (selectedBackend == LinuxExecutionBackend.PROOT || capabilities.root.isGranted)
                     ) {
                         resultMessage = null
@@ -398,6 +365,9 @@ internal fun LinuxEnvironmentScreen(
 
         if (selectedToolsReady) {
             item(key = "optional-tools-title") { EtaPreferenceGroupTitle(stringResource(R.string.ui_optional_tools_3097d6)) }
+            // 基础环境是隐形的：git / bash / curl / rg 这些随基础环境一起装好了，不在下面的列表里。
+            // 不写这一行，用户会以为"这个页面没有 git，是不是得自己装"。
+            item(key = "optional-tools-hint") { EtaPreferenceGroupTitle(stringResource(R.string.linux_optional_tools_hint)) }
             item(key = "optional-tools-card") {
                 EtaPreferenceGroup(
                     modifier = Modifier
@@ -406,7 +376,6 @@ internal fun LinuxEnvironmentScreen(
                 ) {
                     packageProfileUis.forEachIndexed { index, profileUi ->
                         val ready = profileReady[profileUi.target] == true
-                        val isDsh = profileUi.target == InstallTarget.DSH
                         val summaryRes = if (selectedDistribution == LinuxDistribution.DEBIAN) {
                             profileUi.debianSummaryRes
                         } else {
@@ -428,43 +397,14 @@ internal fun LinuxEnvironmentScreen(
                                 stringResource(summaryRes)
                             },
                             endActions = {
-                                if (isDsh && dshWebRunning) {
-                                    EtaTextButton(
-                                        text = stringResource(R.string.action_stop),
-                                        enabled = !dshWebLaunching && !requiresRoot,
-                                        onClick = {
-                                            coroutineScope.launch {
-                                                val stopped = dshWebLauncher.stop(selectedDistribution.terminalEnvironment)
-                                                dshWebRunning = !stopped
-                                            }
-                                        },
-                                    )
-                                }
                                 EtaTextButton(
                                     text = when {
-                                        isDsh && ready -> stringResource(
-                                            if (dshWebLaunching) {
-                                                R.string.linux_dsh_web_starting
-                                            } else if (dshWebRunning) {
-                                                R.string.action_open
-                                            } else {
-                                                R.string.linux_dsh_web_launch
-                                            },
-                                        )
                                         ready -> stringResource(R.string.linux_installed)
                                         busyTarget == profileUi.target -> stringResource(R.string.linux_installing)
                                         else -> stringResource(R.string.linux_install)
                                     },
-                                    enabled = !requiresRoot && if (isDsh && ready) {
-                                        !dshWebLaunching && busyTarget == null
-                                    } else {
-                                        busyTarget == null && !ready
-                                    },
+                                    enabled = !requiresRoot && busyTarget == null && !ready,
                                     onClick = {
-                                        if (isDsh && ready) {
-                                            launchDshWeb()
-                                            return@EtaTextButton
-                                        }
                                         if (busyTarget != null || ready) return@EtaTextButton
                                         busyTarget = profileUi.target
                                         resultMessage = null

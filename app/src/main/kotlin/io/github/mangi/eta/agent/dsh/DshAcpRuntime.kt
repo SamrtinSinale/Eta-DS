@@ -11,8 +11,6 @@ import io.github.mangi.eta.agent.runtime.AgentEvent
 import io.github.mangi.eta.agent.runtime.AgentRuntimeSession
 import io.github.mangi.eta.agent.runtime.AgentRuntimeWire
 import io.github.mangi.eta.agent.runtime.AgentTokenUsage
-import io.github.mangi.eta.agent.terminal.LinuxDistribution
-import io.github.mangi.eta.agent.terminal.LinuxEnvironmentPaths
 import io.github.mangi.eta.core.safeLogType
 import java.io.File
 import kotlinx.coroutines.delay
@@ -696,15 +694,6 @@ internal class DshAcpRuntime(
         }
 
         private val traceFormatter = AgentTraceFormatter()
-
-        private fun readyDistribution(context: Context): LinuxDistribution? =
-            LinuxDistribution.entries.firstOrNull { distribution ->
-                runCatching {
-                    val rootfs = LinuxEnvironmentPaths.rootfsDir(context, distribution)
-                    LinuxEnvironmentPaths.rootfsReady(rootfs.absolutePath) &&
-                        File(rootfs, DSH_ENTRY_RELATIVE).exists()
-                }.getOrDefault(false)
-            }
     }
 }
 

@@ -1,9 +1,9 @@
 package io.github.mangi.eta.agent.dsh
 
 import android.util.Log
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
@@ -44,7 +44,7 @@ internal class DshAcpClient(
     }
 
     private val nextId = AtomicLong(1)
-    private val pending = ConcurrentHashMap<Long, Channel<JSONObject>>()
+    private val pending = AcpResponseSlots()
     private val processLock = Any()
 
     @Volatile
@@ -214,8 +214,7 @@ internal class DshAcpClient(
 
     private suspend fun request(method: String, params: JSONObject, timeoutMs: Long): JSONObject {
         val id = nextId.getAndIncrement()
-        val channel = Channel<JSONObject>(Channel.RENDEZVOUS)
-        pending[id] = channel
+        val slot = pending.register(id)
         try {
             send(JSONObject()
                 .put("jsonrpc", JSONRPC)
@@ -223,7 +222,7 @@ internal class DshAcpClient(
                 .put("method", method)
                 .put("params", params))
             val response = try {
-                withTimeout(timeoutMs) { channel.receive() }
+                withTimeout(timeoutMs) { slot.await() }
             } catch (timeout: TimeoutCancellationException) {
                 throw DshAcpException("$method 超时（${timeoutMs}ms）")
             }
@@ -235,8 +234,7 @@ internal class DshAcpClient(
             }
             return response.optJSONObject("result") ?: JSONObject()
         } finally {
-            pending.remove(id)
-            channel.close()
+            pending.forget(id)
         }
     }
 
@@ -259,7 +257,7 @@ internal class DshAcpClient(
                 val message = runCatching { JSONObject(trimmed) }.getOrNull() ?: continue
                 val id = if (message.has("id") && !message.isNull("id")) message.optLong("id", -1) else -1L
                 if (id >= 0 && (message.has("result") || message.has("error"))) {
-                    pending.remove(id)?.trySend(message)
+                    pending.settle(id, message)
                     continue
                 }
                 val method = message.optString("method")
@@ -369,9 +367,7 @@ internal class DshAcpClient(
 
     /** 让所有在途请求立刻拿到一个错误结果，而不是继续等超时。 */
     private fun failPending(reason: String) {
-        if (pending.isEmpty()) return
-        pending.values.forEach { it.trySend(JSONObject().put("error", JSONObject().put("message", reason))) }
-        pending.clear()
+        pending.failAll(reason)
     }
 
     companion object {
@@ -396,3 +392,40 @@ internal class DshAcpClient(
 }
 
 internal class DshAcpException(message: String) : Exception(message)
+
+/**
+ * 在途 JSON-RPC 请求的结果槽。
+ *
+ * 这里**不能**用 `Channel.RENDEZVOUS`。它是零容量通道，`trySend` 只在**已经有接收者挂在
+ * `receive()` 上**时才成功；而 [DshAcpClient.request] 是先 `send()` 再 `receive()`，所以
+ * dsh 秒回时结果会被 `trySend` 静默丢掉——调用方随后一直等到超时。`session/prompt` 的超时
+ * 是 **30 分钟**，界面上的表现就是"卡住了、点了没反应"。
+ *
+ * 越是快工具越容易踩：`job_output` 这种读完就返回的调用，dsh 几乎是立刻回包。
+ *
+ * [CompletableDeferred] 是一次性结果槽：先到先存，谁在什么时候来取都能拿到，不存在丢的可能。
+ * 结果早于 `await()` 到达只是被存下来，而不是被拒收。
+ */
+internal class AcpResponseSlots {
+    private val slots = ConcurrentHashMap<Long, CompletableDeferred<JSONObject>>()
+
+    /** 登记一个在途请求，返回它的结果槽。必须在 [settle] 之前调用。 */
+    fun register(id: Long): CompletableDeferred<JSONObject> =
+        CompletableDeferred<JSONObject>().also { slots[id] = it }
+
+    /** 结算一个在途请求。false 表示它已经超时或被取消，没人在等这个结果了。 */
+    fun settle(id: Long, message: JSONObject): Boolean = slots.remove(id)?.complete(message) == true
+
+    /** 放弃一个在途请求（超时路径用）。 */
+    fun forget(id: Long) {
+        slots.remove(id)
+    }
+
+    /** 让所有在途请求立刻拿到错误结果，而不是继续等超时。 */
+    fun failAll(reason: String) {
+        if (slots.isEmpty()) return
+        val failure = JSONObject().put("error", JSONObject().put("message", reason))
+        slots.values.forEach { it.complete(failure) }
+        slots.clear()
+    }
+}

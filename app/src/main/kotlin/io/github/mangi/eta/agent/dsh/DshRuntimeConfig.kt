@@ -37,9 +37,6 @@ internal data class DshRuntimeConfig(
      */
     val processDirectory: String = File(rootfsPath, "workspace").absolutePath
 
-    /** su 是 Eta 既有提权路径；脚本里的 export 保证凭据不落进 argv。 */
-    fun command(): List<String> = listOf(SU, "-c", rootScript())
-
     fun environment(): Map<String, String> = buildMap {
         put("HOME", DshRuntimeInstaller.HOME_IN_ROOT)
         put("PATH", PATH_IN_ROOT)
@@ -74,6 +71,9 @@ internal data class DshRuntimeConfig(
                     append("    model: ").append(JSONObject.quote(model)).append('\n')
                     append("- id: system-prompt\n")
                     append("  config:\n")
+                    // `--patch` 的 config 是**整块替换**而不是按键合并：这里少写哪个键，
+                    // 就等于把 dsh 自带的那个键一并抹掉。所以 personaPrefix 必须写回来。
+                    append("    personaPrefix: ").append(JSONObject.quote(PERSONA_PREFIX)).append('\n')
                     append("    personaSuffix: |\n")
                     skillPromptLines().forEach { line -> append("      ").append(line).append('\n') }
                 }
@@ -103,6 +103,9 @@ internal data class DshRuntimeConfig(
             append("        inputModalities: [text, image]\n")
         }
     }
+
+    /** su 是 Eta 既有提权路径；脚本里的 export 保证凭据不落进 argv。 */
+    fun command(): List<String> = listOf(SU, "-c", rootScript())
 
     private fun rootScript(): String {
         val overlay = writeProfileOverlay()
@@ -224,8 +227,18 @@ internal data class DshRuntimeConfig(
         private const val SU = "su"
         private const val ACP_PROFILE = "acp"
         private const val DEFAULT_ROUTE = "deepseek-official"
+
         private const val PERMISSION_MODE = "danger-full-access"
         private const val TAG = "DshRuntimeConfig"
+
+        /**
+         * dsh 的 ACP profile 自带的 persona 前缀，逐字抄自 `dsh-acp-app/cordis.patch.yml`。
+         *
+         * 之所以要在这里重写一遍：`--patch` 覆盖层的 `config` 是整块替换，只写 personaSuffix
+         * 会把这一句静默抹掉（`dsh --profile acp --dump-config` 里 personaPrefix 直接消失）。
+         * dsh 换了这句文案时这里会滞后，但滞后只影响「模型看到的前缀措辞」。
+         */
+        private const val PERSONA_PREFIX = "You are a coding agent powered by the {{model}} model."
         /** 前段是宿主的 Android 路径（su、chroot），后段是 chroot 内的路径（node）。 */
         private const val PATH_IN_ROOT =
             "/system/bin:/system/xbin:/product/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"

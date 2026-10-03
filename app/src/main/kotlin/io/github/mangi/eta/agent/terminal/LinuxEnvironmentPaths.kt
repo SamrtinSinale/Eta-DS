@@ -32,6 +32,10 @@ internal object LinuxEnvironmentPaths {
 
     fun rootfsReady(rootfsPath: String?): Boolean {
         if (rootfsPath.isNullOrBlank()) return false
-        return File(rootfsPath, READY_MARKER).isFile
+        val rootfs = File(rootfsPath)
+        if (!File(rootfs, READY_MARKER).isFile) return false
+        // 标记文件会残留：rootfs 被清空或搬走后它还在，于是空壳环境仍被当成「已就绪」，
+        // 既装不上东西、又不给重装入口。再验一个 rootfs 必备的可执行文件，空壳直接判为未就绪。
+        return File(rootfs, "usr/bin/env").isFile
     }
 }

@@ -14,6 +14,7 @@ import androidx.compose.material.icons.automirrored.outlined.ShortText
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.rounded.AddComment
 import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.Inventory2
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.runtime.Composable
@@ -53,7 +54,7 @@ import top.yukonga.miuix.kmp.window.WindowListPopup
  * Agent App 统一壳层。
  *
  * - 负责全局 Scaffold、状态栏/横向安全边距、顶层工具栏。
- * - 首页工具栏只保留历史入口与溢出菜单（新建对话、终端、浏览器），保持聊天舞台干净。
+ * - 首页工具栏只保留历史入口与溢出菜单（新建对话、终端、Linux 工具环境、浏览器），保持聊天舞台干净。
  * - 非首页子路由统一提供返回按钮与标题，避免每个页面各自像独立设置页。
  * - Settings 由标准二级页骨架自己提供 TopAppBar，壳层在此路由不重复绘制。
  */
@@ -69,11 +70,7 @@ fun AgentAppShell(
     onSearchConversations: (String) -> Unit,
     onNewConversation: () -> Unit,
     onOpenTerminal: () -> Unit,
-    onLaunchDshWeb: () -> Unit,
-    dshWebLabel: String,
-    canStopDshWeb: Boolean,
-    onStopDshWeb: () -> Unit,
-    onRefreshDshWeb: () -> Unit,
+    onOpenLinuxEnvironment: () -> Unit,
     onOpenBrowser: () -> Unit,
     onSelectConversation: (String) -> Unit,
     onConversationRename: (ConversationSummaryUi) -> Unit,
@@ -108,11 +105,7 @@ fun AgentAppShell(
                             onOpenConversationPane = onOpenConversationPane,
                             onNewConversation = onNewConversation,
                             onOpenTerminal = onOpenTerminal,
-                            onLaunchDshWeb = onLaunchDshWeb,
-                            dshWebLabel = dshWebLabel,
-                            canStopDshWeb = canStopDshWeb,
-                            onStopDshWeb = onStopDshWeb,
-                            onRefreshDshWeb = onRefreshDshWeb,
+                            onOpenLinuxEnvironment = onOpenLinuxEnvironment,
                             onOpenBrowser = onOpenBrowser,
                         )
                     }
@@ -167,11 +160,7 @@ private fun AgentTopBar(
     onOpenConversationPane: () -> Unit,
     onNewConversation: () -> Unit,
     onOpenTerminal: () -> Unit,
-    onLaunchDshWeb: () -> Unit,
-    dshWebLabel: String,
-    canStopDshWeb: Boolean,
-    onStopDshWeb: () -> Unit,
-    onRefreshDshWeb: () -> Unit,
+    onOpenLinuxEnvironment: () -> Unit,
     onOpenBrowser: () -> Unit,
 ) {
     val isHome = route is AppRoute.Home
@@ -193,11 +182,7 @@ private fun AgentTopBar(
             TopBarOverflowMenu(
                 onNewConversation = onNewConversation,
                 onOpenTerminal = onOpenTerminal,
-                onLaunchDshWeb = onLaunchDshWeb,
-                dshWebLabel = dshWebLabel,
-                canStopDshWeb = canStopDshWeb,
-                onStopDshWeb = onStopDshWeb,
-                onRefreshDshWeb = onRefreshDshWeb,
+                onOpenLinuxEnvironment = onOpenLinuxEnvironment,
                 onOpenBrowser = onOpenBrowser,
             )
         }
@@ -233,16 +218,12 @@ private val TopBarMenuIconSize = 20.dp
 private fun TopBarOverflowMenu(
     onNewConversation: () -> Unit,
     onOpenTerminal: () -> Unit,
-    onLaunchDshWeb: () -> Unit,
-    dshWebLabel: String,
-    canStopDshWeb: Boolean,
-    onStopDshWeb: () -> Unit,
-    onRefreshDshWeb: () -> Unit,
+    onOpenLinuxEnvironment: () -> Unit,
     onOpenBrowser: () -> Unit,
 ) {
     var showMenu by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { onRefreshDshWeb(); showMenu = true }) {
+        IconButton(onClick = { showMenu = true }) {
             Icon(
                 imageVector = Icons.Outlined.MoreHoriz,
                 modifier = Modifier.size(24.dp),
@@ -256,16 +237,13 @@ private fun TopBarOverflowMenu(
         ) {
             val newConversationText = stringResource(R.string.action_new_conversation)
             val openTerminalText = stringResource(R.string.action_open_terminal)
-            val launchDshWebText = dshWebLabel
-            val stopDshWebText = stringResource(R.string.capability_dsh_stop)
+            val openLinuxEnvironmentText = stringResource(R.string.ui_linux_tool_environment_314d22)
             val openBrowserText = stringResource(R.string.action_open_browser)
             val menuItems = remember(
                 newConversationText,
                 openTerminalText,
-                launchDshWebText,
+                openLinuxEnvironmentText,
                 openBrowserText,
-                stopDshWebText,
-                canStopDshWeb,
             ) {
                 listOf(
                     DropdownItem(
@@ -289,10 +267,10 @@ private fun TopBarOverflowMenu(
                         },
                     ),
                     DropdownItem(
-                        text = launchDshWebText,
+                        text = openLinuxEnvironmentText,
                         icon = { modifier ->
                             Icon(
-                                imageVector = Icons.Rounded.Code,
+                                imageVector = Icons.Rounded.Inventory2,
                                 contentDescription = null,
                                 modifier = modifier.size(TopBarMenuIconSize),
                             )
@@ -308,7 +286,7 @@ private fun TopBarOverflowMenu(
                             )
                         },
                     ),
-                ) + if (canStopDshWeb) listOf(DropdownItem(text = stopDshWebText)) else emptyList()
+                )
             }
             ListPopupColumn {
                 menuItems.forEachIndexed { index, item ->
@@ -322,9 +300,8 @@ private fun TopBarOverflowMenu(
                             when (index) {
                                 0 -> onNewConversation()
                                 1 -> onOpenTerminal()
-                                2 -> onLaunchDshWeb()
+                                2 -> onOpenLinuxEnvironment()
                                 3 -> onOpenBrowser()
-                                4 -> onStopDshWeb()
                             }
                         },
                     )

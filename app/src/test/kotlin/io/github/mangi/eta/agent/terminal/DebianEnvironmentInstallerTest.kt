@@ -36,12 +36,16 @@ class DebianEnvironmentInstallerTest {
     }
 
     @Test
-    fun readinessUsesInstallerMarkerOnly() {
+    fun readinessRequiresMarkerAndRootfsContent() {
         val rootfs = temporaryFolder.newFolder("rootfs")
         val marker = File(rootfs, LinuxEnvironmentPaths.READY_MARKER)
 
         assertFalse(LinuxEnvironmentPaths.rootfsReady(rootfs.absolutePath))
         marker.writeText("version=13\n")
+        // 标记残留但 rootfs 被清空时不能算就绪。
+        assertFalse(LinuxEnvironmentPaths.rootfsReady(rootfs.absolutePath))
+        File(rootfs, "usr/bin").mkdirs()
+        File(rootfs, "usr/bin/env").writeText("#!/bin/sh\n")
         assertTrue(LinuxEnvironmentPaths.rootfsReady(rootfs.absolutePath))
     }
 
