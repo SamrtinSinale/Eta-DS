@@ -15,7 +15,7 @@
 #   实测过的边界（2026-10-03，别再试一遍 —— 都是"以为便宜、实际不便宜"）：
 #     · 那 4 个终端控制器**不是零依赖**：`ConsoleSessionController` 要 `TerminalEnvironment`
 #       + `ShellProcessSupervisor`；补进去之后继续牵出 `AgentExecutionService`/UI/Compose。
-#       （审查建议的"加 5 个消费者，零成本"经实测不成立。）
+#       
 #     · `AgentTerminalToolCatalog` → `AgentToolSchema` → `AgentExecutionService` → `ui/SettingsScreen.kt`
 #       → Compose 组件 → `hook/xiaoai`：错误驱动的补齐会**爆炸**。
 #     · `SharedFolderMounts`（要 `config.Prefs`）、`TerminalRuntime`（要 `RootAccess` +

@@ -306,39 +306,28 @@ internal object DshRuntimeInstaller {
 }
 
 /**
- * 清空运行时目录用的 root 脚本。
+ * 提权清理运行时目录用的 root 脚本（su 里跑）。**摘挂载 → 校验 → 删除**，顺序不能变。
  *
- * 这个目录同时是挂载宿主：启动脚本往里挂 `/dev`、`/proc` 和技能库，dsh 自己的终端工具链
- * 也会挂别的东西。**挂载点还在时 `rm -rf` 不会停下**——它会先穿过挂载点把里面的东西删掉
- *（宿主 `/dev` 的设备节点、用户的整个技能库），然后才因为删不掉挂载点本身报错。
- *
- * 所以脚本严格按这个顺序：规范化目标路径 → 收集并摘掉下面的挂载 → **确认没剩下挂载才敢删**
- * → 删 → 再验一次删干净。
- *
- * 两个坑，都是实测踩出来的：
- *
+ * 两个坑（都真踩过）：
  * 1. **路径必须规范化**。`context.filesDir` 是 `/data/user/0/<包名>/files`，而 `/data/user/0`
- *    是指向 `/data/data` 的符号链接；内核记录的挂载点是**解析后**的 `/data/data/...`。
- *    拿未解析的路径比前缀，`dev`（宿主 `/dev` 的 rbind）、`proc`、技能库这三个挂载一个都
- *    匹配不到，于是它们全被 `rm -rf` 穿过——本机按同构场景（符号链接前缀 + bind）复现过：
- *    扫描 0 命中、`rm` 报 `Device or resource busy`，而**源目录内容已经被删了**。
- *    这里对两侧都做 `readlink -f`，任何别名（`/data/user/0`、`/data_mirror/...`）都能对上。
- * 2. **校验必须放在 `rm -rf` 之前**。删完再报 `HETA_PURGE_INCOMPLETE` 是"先损坏再报错"；
+ *    是指向 `/data/data` 的符号链接，内核对挂载点记的是**解析后**的路径；前缀对不上就一个都匹配
+ *    不到，于是 `rm -rf` 会**穿过挂载点**把宿主 `/dev`、用户技能库删掉。这里对两侧都做
+ *    `readlink -f`，任何别名（`/data/user/0`、`/data_mirror/...`）都能对上。
+ * 2. **校验必须放在 `rm -rf` 之前**。删完再报 `HETA_PURGE_INCOMPLETE` 是「先损坏再报错」；
  *    摘不干净就直接 `HETA_PURGE_ABORT` 退出，一个字都不删。
  *
  * 匹配按路径边界（`c` 本身或 `c/` 之下），不是简单前缀，免得顺手动到
  * `…/dsh-runtime.installing`、`…/dsh-runtime-old` 这些兄弟目录。摘挂载按路径层数从深到浅
- *（`awk -F/` 数段数），嵌套时从最里层往外摘。最后有一道兜底：目标路径太浅（误传 `/`、
- * `/data`）就什么都不做。路径按 shell 规矩单引号转义；mountinfo 里的空格会写成 `\040`，
- * App 私有目录下不会出现，所以不做反转义。
- */
-/**
- * 提权清理脚本（su 里跑）。**与 `SafeTreeDelete.parseMountPoints` 的语义差异是刻意的**，
- * 别照着一边改另一边：
+ * （`awk -F/` 数段数），嵌套时从最里层往外摘。最后有一道兜底：目标路径太浅（误传 `/`、`/data`）
+ * 就什么都不做。路径按 shell 规矩单引号转义。
+ *
+ * 与 `SafeTreeDelete.parseMountPoints` 的语义差异是**刻意的**，别照着一边改另一边：
  *   - 转义：Kotlin 侧解码 `\040`/`\011`/`\012`/`\134`，未知转义 → fail-closed（当作有挂载）；
- *     本脚本**不解码**（前提：目标路径不含需转义的字符，App 私有目录下成立），直接用 `readlink -f` 比对。
- *   - 失败处理：Kotlin 侧任一行解析失败 → 当作"有挂载"（保守）；本脚本 `readlink -f` 失败 →
- *     单独判 `ORPHAN`，不阻塞删除。
+ *     本脚本**不解码**，所以把「需要转义」这情形改成**强制拒绝**，而不是留在文档里当前提：
+ *     目标路径含空格/制表符/反斜杠 → `HETA_PURGE_ABORT`；挂载点里出现转义（含 `\`）→ 按 `LIVE`
+ *     处理（阻塞删除），**不再**误判成 ORPHAN（否则 `rm -rf` 会穿过那个挂载）。
+ *   - 失败处理：Kotlin 侧任一行解析失败 → 当作「有挂载」（保守）；本脚本 `readlink -f` 失败 →
+ *     单独判 `ORPHAN`，不阻塞删除（**仅限挂载点不含转义的普通路径**）。
  *   - 粒度：本脚本按挂载点**路径**比对；Kotlin 侧按调用方给的名单。
  * 两侧行为都被各自测试钉着（`SafeTreeDeleteTest` / `test-dsh-purge.sh`），改这里先看那两份。
  */
@@ -348,6 +337,9 @@ internal fun runtimePurgeScript(target: String): String {
         append("t=").append(quoted).append("; ")
         // 规范化失败就什么都不做：宁可"未就绪"，也不能凭一个对不上的路径去删。
         append("c=$(readlink -f \"${'$'}t\" 2>/dev/null) || exit 1; ")
+        // 需要转义的目标路径直接拒绝（mountinfo 里空格会写成 \040，本脚本不解码；硬比会失手）。
+        // 「App 私有目录不含这种路径」以前只是文档里的前提，现在它是强制的。
+        append("case \"${'$'}c\" in *' '*|*\"${'$'}(printf '\\t')\"*|*\\\\*) echo \"HETA_PURGE_ABORT: target path needs escaping: ${'$'}c\"; exit 1;; esac; ")
         // 兜底：目标至少要有四层（/data/data/<包名>/files/<目录>），否则拒绝执行。
         append("case \"${'$'}c\" in /*/*/*/*) ;; *) echo \"HETA_PURGE_ABORT: path too shallow: ${'$'}c\"; exit 1;; esac; ")
         // 扫 mountinfo，分两类：
@@ -356,6 +348,9 @@ internal fun runtimePurgeScript(target: String): String {
         //             umount 也永远找不到路径。**它不能算阻塞** —— 设备上就撞到过：38 个这种
         //             挂载把安装流程永久卡在"未就绪"。
         append("scan() { awk '{print ${'$'}5}' /proc/self/mountinfo 2>/dev/null | while read -r m; do ")
+        // 挂载点里出现转义（mountinfo 写成 \040 等）→ 按 LIVE 处理：canonical 化不了，
+        // 也绝不能当 ORPHAN 放过 —— 那会让 rm -rf 穿过它。宁可 abort 留残骸，等重启回收。
+        append("case \"${'$'}m\" in *\\\\*) echo \"LIVE ${'$'}m\"; continue;; esac; ")
         append("cm=$(readlink -f \"${'$'}m\" 2>/dev/null); ")
         append("if [ -z \"${'$'}cm\" ]; then echo \"ORPHAN ${'$'}m\"; continue; fi; ")
         append("case \"${'$'}cm\" in \"${'$'}c\"|\"${'$'}c\"/*) echo \"LIVE ${'$'}m\";; esac; done; }; ")
