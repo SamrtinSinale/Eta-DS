@@ -74,6 +74,55 @@ check "expectedBaseVersion 转发" 1 "$(grep -c 'rootfsReady(rootfs.absolutePath
 check "DEFAULT_SYSTEM_PROMPT 只声明一次" 1 "$(grep -rc '^    val DEFAULT_SYSTEM_PROMPT:' app/src/main --include='*.kt' | awk -F: '{s+=$2} END {print s+0}')"
 check "const DEFAULT_SYSTEM_PROMPT 残留" 0 "$(grep -rc 'const val DEFAULT_SYSTEM_PROMPT' app/src/main --include='*.kt' | awk -F: '{s+=$2} END {print s+0}')"
 
+echo "=== UNBOUNDED 读取必须登记 ==="
+# 显式化 ≠ 可审计：若只是散写 Int.MAX_VALUE，下次新增站点会照抄、没人知道为什么。
+# 判据：白名单之外出现 `CollectLimit.UNBOUNDED` 即失败（按文件数）。白名单每条要写理由。
+#   注意：与 ProcessBuilder/Runtime 两条一样**按行剔注释** —— 我第一版用了 `grep -rl`，
+#   反向用例 ⑩（注释里提到 UNBOUNDED）当场报假失败。
+#   理由：这三个文件的调用点是**终端会话的完整输出**（截断用户可见内容比无界更糟）；
+#   RootShellDeviceController 那份无上限实现已改名 readAllUnbounded，调用点自带说明。
+check "UNBOUNDED 读取点（白名单外文件数）" 0 "$(
+  grep -rn 'CollectLimit\.UNBOUNDED' app/src/main/kotlin --include='*.kt' \
+    | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' \
+    | cut -d: -f1 | sort -u \
+    | grep -vE 'core/CollectLimit\.kt$' \
+    | grep -vE 'agent/terminal/DetachedTaskSupervisor\.kt$' \
+    | grep -vE 'agent/terminal/RootShellTerminalController\.kt$' \
+    | grep -vE 'agent/terminal/ShellProcessSupervisor\.kt$' \
+    | wc -l
+)"
+
+echo "=== root 进程启动点必须登记 ==="
+# 判据：**白名单之外**出现含真实 `ProcessBuilder(` 调用的文件即失败（按文件数，同「裸递归删」的形制）。
+# 白名单形制天然免疫"过期断言"：站点迁走后条目变陈旧不会触发失败，只有**新增**才会。
+# 类别（按 docs/ROOT_COMMAND_SURVEY.md 的结论 B：只对新代码立规矩）：
+#   统一入口    —— BoundedRootCommandExecutor / ShellProcessSupervisor
+#   已评估保留  —— 结论 B 明确不迁，且各有语义性例外（见调查报告的 E1–E8）
+#
+# 新的 su 调用点请走统一入口；确实要自己 spawn 的，在此登记并写明理由。
+# 长生命周期执行器不要每条命令建一个实例（那会架空取消语义，见报告 L7）。
+check "root 进程启动点（白名单外文件数）" 0 "$(
+  grep -rn 'ProcessBuilder(' app/src/main/kotlin --include='*.kt' \
+    | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' \
+    | cut -d: -f1 | sort -u \
+    | grep -vE 'agent/device/BoundedRootCommandExecutor\.kt$' \
+    | grep -vE 'agent/terminal/ShellProcessSupervisor\.kt$' \
+    | grep -vE 'agent/terminal/DetachedTaskSupervisor\.kt$' \
+    | grep -vE 'agent/dsh/DshRuntimeInstaller\.kt$' \
+    | grep -vE 'agent/dsh/DshAcpClient\.kt$' \
+    | grep -vE 'agent/device/RootShellDeviceController\.kt$' \
+    | grep -vE 'systemizer/GoogleAppSystemizerInstaller\.kt$' \
+    | wc -l
+)"
+# 与上一条同样**按行剔除注释**：这个仓库到处写"以前怎么写、为什么改"，注释里提到旧形态很常见，
+# 不排除就会误报到已经迁走的正确代码上（审查实测复现过 —— 我第一版只给 ProcessBuilder 那条加了排除，
+# 这条漏了，而反向用例也只测了 ProcessBuilder 的注释形态，于是潜伏下来）。
+check "Runtime.getRuntime 残留" 0 "$(
+  grep -rn 'Runtime\.getRuntime' app/src/main/kotlin --include='*.kt' \
+    | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' \
+    | wc -l
+)"
+
 echo "=== 退避 stamp 只声明一处 ==="
 # 判据是「第二份不存在」，不钉新写法的形状：两条回收路径曾各有一份**逐字相同**的实现，
 # 改语义漏一处就是数据安全那类事故（见 core/SweepStamp.kt 的 KDoc）。

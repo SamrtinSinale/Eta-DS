@@ -1178,10 +1178,10 @@ internal class RootShellDeviceController(
         val output = ByteArrayOutputCollector()
         val stderr = ByteArrayOutputCollector()
         val outputThread = thread(name = "agent-root-stdout") {
-            process.inputStream.use { input -> output.readFrom(input) }
+            process.inputStream.use { input -> output.readAllUnbounded(input) }
         }
         val stderrThread = thread(name = "agent-root-stderr") {
-            process.errorStream.use { input -> stderr.readFrom(input) }
+            process.errorStream.use { input -> stderr.readAllUnbounded(input) }
         }
 
         val finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
@@ -1393,7 +1393,8 @@ internal class RootShellDeviceController(
         @Volatile var completed: Boolean = false
             private set
 
-        fun readFrom(input: java.io.InputStream) {
+        /** 无上限读取（与 SessionStatusProtocol.readFrom 是**两份不同实现**，别再同名）。 */
+        fun readAllUnbounded(input: java.io.InputStream) {
             runCatching {
                 val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                 while (true) {

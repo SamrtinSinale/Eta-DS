@@ -26,7 +26,6 @@ class DshRuntimeInstallerPurgeTest {
     private fun skip(stamp: SweepStamp?, nowMs: Long, names: List<String>): Boolean =
         shouldSkipSweep(stamp, nowMs, names, 24 * 60 * 60 * 1000L)
 
-
     @Test
     fun purgeScriptCanonicalisesPathsAndVerifiesBeforeDeletingAnything() {
         val script = runtimePurgeScript("/data/user/0/io.sartin.eats/files/dsh-runtime")

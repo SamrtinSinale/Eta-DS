@@ -1,5 +1,6 @@
 package io.github.mangi.eta.agent.terminal
 
+import io.github.mangi.eta.core.CollectLimit
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -567,10 +568,10 @@ internal fun runOneShotShell(
         val output = ByteArrayOutputCollector()
         val stderr = ByteArrayOutputCollector()
         val outputThread = thread(name = "agent-terminal-stdout") {
-            process.inputStream.use { input -> output.readFrom(input) }
+            process.inputStream.use { input -> output.readFrom(input, CollectLimit.UNBOUNDED) }
         }
         val stderrThread = thread(name = "agent-terminal-stderr") {
-            process.errorStream.use { input -> stderr.readFrom(input) }
+            process.errorStream.use { input -> stderr.readFrom(input, CollectLimit.UNBOUNDED) }
         }
         val stdinThread = thread(name = "agent-terminal-stdin") {
             process.outputStream.use { out ->

@@ -1,5 +1,6 @@
 package io.github.mangi.eta.agent.terminal
 
+import io.github.mangi.eta.core.CollectLimit
 import io.github.mangi.eta.core.AgentLogger
 
 import java.io.File
@@ -160,10 +161,10 @@ internal class RootShellTerminalController(
             stderr = stderr
         )
         session.stdoutThread = thread(name = "agent-terminal-session-stdout-$id", isDaemon = true) {
-            process.inputStream.use { input -> stdout.readFrom(input) }
+            process.inputStream.use { input -> stdout.readFrom(input, CollectLimit.UNBOUNDED) }
         }
         session.stderrThread = thread(name = "agent-terminal-session-stderr-$id", isDaemon = true) {
-            process.errorStream.use { input -> stderr.readFrom(input) }
+            process.errorStream.use { input -> stderr.readFrom(input, CollectLimit.UNBOUNDED) }
         }
         session.waiterThread = thread(name = "agent-terminal-session-waiter-$id", isDaemon = true) {
             runCatching { process.waitFor() }

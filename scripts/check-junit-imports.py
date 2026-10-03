@@ -7,6 +7,11 @@
   - 认任何以该名字结尾的 import（`import kotlin.test.assertFalse`、jupiter 同样算）；
   - 认全限定调用 `org.junit.Assert.assertFalse(...)`。
 只有"用了、既没导入、也没写全限定"才报。
+作用域闸门（**必须先写在断言里，否则「检查通过」会被误读成「没问题」**）：
+  - **只扫测试根目录**（默认 `app/src/test`，可用第一个参数覆盖），不扫主源集；
+  - 文件里必须出现 `junit` 或 `kotlin.test` 字样才进入检查 —— 没有这两个词的 Kotlin 文件
+    本来就不是 JUnit 测试，跳过是刻意的（反向用例里若造一个"完全没有 junit 字样"的探针，
+    它不会报警，这是设计而非漏洞）。
 
 用法：python3 scripts/check-junit-imports.py [测试根目录]
 """

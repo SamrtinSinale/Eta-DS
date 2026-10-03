@@ -25,7 +25,6 @@ class StaleRetirementSweeperTest {
     private fun skip(stamp: SweepStamp?, nowMs: Long, names: List<String>): Boolean =
         shouldSkipSweep(stamp, nowMs, names, StaleRetirementSweeper.RETRY_WINDOW_MS)
 
-
     @get:Rule
     val temporaryFolder = TemporaryFolder()
 

@@ -47,7 +47,7 @@ internal class ByteArrayOutputCollector {
     private var totalBytesRead = 0L
     private var truncated = false
 
-    fun readFrom(input: java.io.InputStream, maxBytes: Int = Int.MAX_VALUE) {
+    fun readFrom(input: java.io.InputStream, maxBytes: Int) {
         runCatching {
             val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
             while (true) {

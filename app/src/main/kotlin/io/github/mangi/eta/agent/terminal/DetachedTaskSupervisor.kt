@@ -1,5 +1,6 @@
 package io.github.mangi.eta.agent.terminal
 
+import io.github.mangi.eta.core.CollectLimit
 import io.github.mangi.eta.core.AgentLogger
 
 import android.content.Context
@@ -408,7 +409,7 @@ internal class DetachedTaskSupervisor(
         }
         val output = ByteArrayOutputCollector()
         val reader = thread(name = "agent-daemon-launch-reader", isDaemon = true) {
-            process.inputStream.use { input -> output.readFrom(input) }
+            process.inputStream.use { input -> output.readFrom(input, CollectLimit.UNBOUNDED) }
         }
         val finished = runCatching { process.waitFor(timeoutSeconds, TimeUnit.SECONDS) }.getOrDefault(false)
         if (!finished) {

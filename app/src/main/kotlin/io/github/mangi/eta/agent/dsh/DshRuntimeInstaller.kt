@@ -234,7 +234,6 @@ internal object DshRuntimeInstaller {
             ?.take(limit)
             ?: emptyList()
 
-
     /** 把删不掉的目录改名让路（挂载点跟着改名走）；改名失败返回 null。 */
     private fun retireAside(directory: File): File? {
         val aside = File(directory.parentFile, "${directory.name}.broken-${System.currentTimeMillis()}")

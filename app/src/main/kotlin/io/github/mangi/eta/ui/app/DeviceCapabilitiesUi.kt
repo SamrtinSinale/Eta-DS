@@ -29,7 +29,6 @@ internal data class DeviceCapabilitiesUi(
     val accessibilityAvailable: Boolean get() = tools.accessibilityAvailable
 }
 
-
 @Composable
 internal fun rememberDeviceCapabilities(): DeviceCapabilitiesUi {
     val context = LocalContext.current.applicationContext
