@@ -190,6 +190,44 @@ class DshRuntimeConfigOverlayTest {
         assertTrue("没收回空目录：$command", command.contains("-type d -empty -delete"))
     }
 
+    /**
+     * 把当前实现生成的 overlay 写到 `build/dsh-e2e-overlay.patch.yml`，给端到端冒烟测试用
+     * （`scripts/test-dsh-e2e.sh`）：它拿这份真 overlay 去启动真运行时。所以 overlay 一旦又被
+     * 拼坏（`--patch` 坏 YAML 那次），冒烟测试会直接红 —— 这正是那条教训的兜底。
+     */
+    @Test
+    fun writesTheGeneratedOverlayForTheEndToEndSmokeTest() {
+        val file = java.io.File("build/dsh-e2e-overlay.patch.yml")
+        file.parentFile?.mkdirs()
+        file.writeText(overlayOf(config()))
+
+        assertTrue("overlay 没写出来：${file.absolutePath}", file.length() > 0)
+    }
+
+    /**
+     * 把**真启动脚本**写到 `build/dsh-startup-script.sh`，给端到端冒烟测试用
+     * （`scripts/test-dsh-e2e.sh`）。
+     *
+     * 端到端以前自己手写 `export DEEPSEEK_*`，于是「凭据写成 0600 文件 → `set -a; . file;
+     * set +a; rm -f file`」这条真路径一次都没被跑过 —— 只有 `contains` 字符串断言，正是坏
+     * YAML 那次的病根。现在端到端跑的就是这里导出的脚本：`. file` 没生效 → 没有 baseUrl →
+     * 打到真网关 → 冒烟直接红；跑完凭据文件还在 → 冒烟也红。
+     *
+     * 第一行注释带着 rootfs 路径，供端到端 sed 成本次自己的临时目录。
+     */
+    @Test
+    fun writesTheRealStartupScriptForTheEndToEndSmokeTest() {
+        val config = config()
+        val script = config.command().last()
+        val file = java.io.File("build/dsh-startup-script.sh")
+        file.parentFile?.mkdirs()
+        file.writeText("# dsh-e2e-rootfs=" + config.rootfsPath + "\n" + script)
+        file.setExecutable(true)
+
+        assertTrue("脚本里应当有凭据文件的 source：$script", script.contains("set -a; . "))
+        assertTrue("导出的启动脚本没写出来：${file.absolutePath}", file.length() > 0)
+    }
+
     @Test
     fun commandKeepsCredentialsOutOfArgv() {
         val config = config()

@@ -25,6 +25,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.mangi.eta.R
@@ -45,6 +46,7 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun WorkspaceScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val store = remember(context.applicationContext) { WorkspaceFileStore(context) }
     val scope = rememberCoroutineScope()
     var path by rememberSaveable { mutableStateOf("") }
@@ -63,14 +65,14 @@ internal fun WorkspaceScreen(onBack: () -> Unit) {
             try {
                 var succeeded = 0
                 uris.forEach { if (store.importFile(it)) succeeded++ }
-                message = if (succeeded == uris.size) context.getString(R.string.capability_workspace_imported)
-                else context.getString(R.string.capability_workspace_partial_import, succeeded)
+                message = if (succeeded == uris.size) resources.getString(R.string.capability_workspace_imported)
+                else resources.getQuantityString(R.plurals.capability_workspace_partial_import, succeeded, succeeded)
                 if (succeeded > 0) path = "imports"
                 revision++
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                message = context.getString(R.string.capability_workspace_failed)
+                message = resources.getString(R.string.capability_workspace_failed)
             } finally {
                 busy = false
             }
@@ -83,11 +85,11 @@ internal fun WorkspaceScreen(onBack: () -> Unit) {
             busy = true
             try {
                 store.exportFile(source, uri)
-                message = context.getString(R.string.capability_workspace_exported)
+                message = resources.getString(R.string.capability_workspace_exported)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                message = context.getString(R.string.capability_workspace_failed)
+                message = resources.getString(R.string.capability_workspace_failed)
             } finally {
                 busy = false
             }
@@ -100,7 +102,7 @@ internal fun WorkspaceScreen(onBack: () -> Unit) {
             throw cancelled
         } catch (_: Exception) {
             entries = emptyList()
-            message = context.getString(R.string.capability_workspace_failed)
+            message = resources.getString(R.string.capability_workspace_failed)
         }
     }
     MiuixScaffoldPage(title = stringResource(R.string.capability_workspace), onBack = onBack) {
@@ -130,7 +132,7 @@ internal fun WorkspaceScreen(onBack: () -> Unit) {
                             accessLauncher.launch(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
                                 Uri.parse("package:${context.packageName}")))
                         } catch (_: android.content.ActivityNotFoundException) {
-                            message = context.getString(R.string.capability_workspace_failed)
+                            message = resources.getString(R.string.capability_workspace_failed)
                         }
                     },
                 )

@@ -1,5 +1,9 @@
 package io.github.mangi.eta
 
+import io.github.mangi.eta.agent.dsh.DshRuntimeInstaller
+import io.github.mangi.eta.agent.terminal.LinuxEnvironmentPaths
+import io.github.mangi.eta.agent.terminal.LinuxDistribution
+import io.github.mangi.eta.core.StaleRetirementSweeper
 import io.github.mangi.eta.agent.voice.SpeechOssUpload
 import android.app.Application
 import android.os.Handler
@@ -76,6 +80,36 @@ class EtaApp : Application(), XposedServiceHelper.OnServiceListener {
             }.onFailure { throwable ->
                 AndroidAgentLogger.warn(
                     "Agent tool server start failed: type=${throwable.safeLogType()}"
+                )
+            }
+            runCatching {
+                // 让路残骸的回收：没有这一步，*.broken-* 就是看不见的磁盘增长（实测有 291MB 的）。
+                // 扫多根：让路产物既有 filesDir 顶层的，也有 rootfs 深处的（opt/eta/...）。
+                val retirementRoots = listOf(
+                    filesDir,
+                    LinuxEnvironmentPaths.rootfsDir(this@EtaApp, LinuxDistribution.DEBIAN),
+                    LinuxEnvironmentPaths.rootfsDir(this@EtaApp, LinuxDistribution.ALPINE),
+                )
+                StaleRetirementSweeper.sweep(
+                    filesDir = filesDir,
+                    roots = retirementRoots,
+                    purge = { target -> DshRuntimeInstaller.purgeAsRoot(target) },
+                ) { unreleased, outcome ->
+                    AndroidAgentLogger.info(
+                        "让路残骸未释放（$outcome），等挂载消失或权限允许再收：${unreleased.absolutePath}"
+                    )
+                }
+            }.onFailure { throwable ->
+                AndroidAgentLogger.warn(
+                    "Stale retirement sweep failed: type=${throwable.safeLogType()}"
+                )
+            }
+            runCatching {
+                // 改名遗留：已存的 provider 里那句 "你是 Eda/Eta，…" 还留着，升级成当前默认。
+                ProviderRepository.migrateLegacySystemPrompts()
+            }.onFailure { throwable ->
+                AndroidAgentLogger.warn(
+                    "Provider prompt migration failed: type=${throwable.safeLogType()}"
                 )
             }
             runCatching {

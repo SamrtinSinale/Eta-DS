@@ -1,11 +1,10 @@
-package io.github.mangi.eta.ui.components
+package io.github.mangi.eta.ui.markdown
 
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.sp
-import io.github.mangi.eta.ui.markdown.StreamingGfmParserSession
-import org.intellij.markdown.MarkdownElementTypes
-import org.intellij.markdown.flavours.gfm.GFMElementTypes
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -91,22 +90,23 @@ class SmoothTextRevealPolicyTest {
     }
 
     @Test
-    fun commonPrefixNeverEndsInsideAChangedSurrogatePair() {
-        assertEquals(0, commonUtf16PrefixLength("😀 alpha", "😁 beta"))
-        assertEquals(3, commonUtf16PrefixLength("A😀x", "A😀y"))
-        assertEquals(0, commonUtf16PrefixLength("first", "second"))
+    fun replacementSharingPrefixInsideSurrogatePairFallsBackToCompleteScan() {
+        // 增量重建只处理纯追加；替换即使共享 UTF-16 前缀也整体重扫，不会切开代理对。
+        assertReplacementFallsBackToCompleteScan(previous = "😀 alpha", replacement = "😁 beta")
+        assertReplacementFallsBackToCompleteScan(previous = "A😀x", replacement = "A😀y")
+        assertReplacementFallsBackToCompleteScan(previous = "first", replacement = "second")
     }
 
     @Test
-    fun changedExtendedGraphemeSnapsPreservedPrefixToPreviousBoundary() {
+    fun changedExtendedGraphemeFallsBackToCompleteScanWithoutSplitting() {
+        // “👨‍👩X”与“👨‍👧Y”共享的前缀结束在 ZWJ 序列中间，只能整体重扫而不是复用半截字素。
         val previous = "👨‍👩X"
         val replacement = "👨‍👧Y"
-        val commonPrefixEnd = commonUtf16PrefixLength(previous, replacement)
-        val preservedBoundary = graphemeBoundaries(replacement)
-            .last { boundary -> boundary <= commonPrefixEnd }
 
-        assertEquals(3, commonPrefixEnd)
-        assertEquals(0, preservedBoundary)
+        assertArrayEquals(
+            intArrayOf(0, 5, 6),
+            updateGraphemeBoundaries(previous, graphemeBoundaries(previous), replacement),
+        )
     }
 
     @Test
@@ -196,112 +196,62 @@ class SmoothTextRevealPolicyTest {
     }
 
     @Test
-    fun markdownBatchEndsOnlyAfterCompleteGraphemes() {
-        val content = "A👨‍👩‍👧‍👦中B"
-
-        assertEquals(12, streamingMarkdownBatchEnd(content, start = 0, maxGraphemes = 2))
-        assertEquals(13, streamingMarkdownBatchEnd(content, start = 12, maxGraphemes = 1))
-        assertEquals(content.length, streamingMarkdownBatchEnd(content, start = 13, maxGraphemes = 8))
-    }
-
-    @Test
-    fun markdownBatchCompletesGraphemeExtendedAcrossPreviousChunk() {
-        val content = "A\u0301B"
-
-        assertEquals(2, streamingMarkdownBatchEnd(content, start = 1, maxGraphemes = 1))
-        assertEquals(0, streamingMarkdownBatchEnd(content, start = -2, maxGraphemes = 0))
-        assertEquals(content.length, streamingMarkdownBatchEnd(content, start = 99, maxGraphemes = 4))
-    }
-
-    @Test
-    fun markdownBatchSizeCatchesUpWithoutFloodingAFrame() {
-        assertEquals(24, streamingMarkdownBatchSize(backlogChars = 1))
-        assertEquals(40, streamingMarkdownBatchSize(backlogChars = 64))
-        assertEquals(64, streamingMarkdownBatchSize(backlogChars = 160))
-        assertEquals(96, streamingMarkdownBatchSize(backlogChars = 384))
-    }
-
-    @Test
     fun markdownDocumentCollapsesSourceBlankLinesIntoSemanticBlocks() {
         val snapshot = StreamingGfmParserSession().parse(
             source = "第一段\n\n\n第二段",
             isComplete = true,
         )
 
-        assertEquals(
-            listOf(MarkdownElementTypes.PARAGRAPH, MarkdownElementTypes.PARAGRAPH),
-            topLevelMarkdownBlocks(snapshot.state.node).map { node -> node.type },
-        )
+        val blocks = snapshot.document.blocks
+        assertEquals(2, blocks.size)
+        assertEquals(listOf("第一段", "第二段"), blocks.map { block -> (block as MarkdownParagraph).text.text })
     }
 
     @Test
-    fun markdownBlockSpacingBuildsReadableHierarchyWithoutLeadingGap() {
-        assertEquals(0.sp, markdownBlockSpacing(null, MarkdownElementTypes.PARAGRAPH))
-        assertEquals(
-            16.sp,
-            markdownBlockSpacing(MarkdownElementTypes.PARAGRAPH, MarkdownElementTypes.PARAGRAPH),
-        )
-        assertEquals(
-            24.sp,
-            markdownBlockSpacing(MarkdownElementTypes.PARAGRAPH, MarkdownElementTypes.ATX_2),
-        )
-        assertEquals(
-            10.sp,
-            markdownBlockSpacing(MarkdownElementTypes.ATX_2, MarkdownElementTypes.PARAGRAPH),
-        )
-        assertEquals(
-            16.sp,
-            markdownBlockSpacing(MarkdownElementTypes.PARAGRAPH, MarkdownElementTypes.UNORDERED_LIST),
-        )
-        assertEquals(
-            16.sp,
-            markdownBlockSpacing(GFMElementTypes.TABLE, MarkdownElementTypes.PARAGRAPH),
-        )
+    fun markdownBlockGapBuildsReadableHierarchyWithoutLeadingGap() {
+        val first = MarkdownParagraph(0, AnnotatedString("第一段"))
+        val second = MarkdownParagraph(4, AnnotatedString("第二段"))
+        val heading = MarkdownHeading(8, level = 2, text = AnnotatedString("小节"))
+        val subHeading = MarkdownHeading(12, level = 3, text = AnnotatedString("子节"))
+        val list = MarkdownList(16, ordered = false, loose = false, items = emptyList())
+        val table = MarkdownTable(20, alignments = emptyList(), header = emptyList(), rows = emptyList())
+
+        assertEquals(0.sp, markdownBlockGap(null, first, MarkdownTone.Answer))
+        assertEquals(12.sp, markdownBlockGap(first, second, MarkdownTone.Answer))
+        assertEquals(22.sp, markdownBlockGap(first, heading, MarkdownTone.Answer))
+        assertEquals(18.sp, markdownBlockGap(first, subHeading, MarkdownTone.Answer))
+        assertEquals(8.sp, markdownBlockGap(heading, second, MarkdownTone.Answer))
+        assertEquals(8.sp, markdownBlockGap(heading, subHeading, MarkdownTone.Answer))
+        assertEquals(14.sp, markdownBlockGap(first, list, MarkdownTone.Answer))
+        assertEquals(14.sp, markdownBlockGap(table, first, MarkdownTone.Answer))
+
+        // 思考语气的间距整体收敛。
+        assertEquals(0.sp, markdownBlockGap(null, first, MarkdownTone.Thinking))
+        assertEquals(9.sp, markdownBlockGap(first, second, MarkdownTone.Thinking))
+        assertEquals(16.5.sp, markdownBlockGap(first, heading, MarkdownTone.Thinking))
     }
 
     @Test
-    fun streamingListMarkerWaitsForItsOwnContentToStart() {
-        val currentItem = RevealBlockKey(10)
+    fun listMarkerWaitsForItsOwnContentToStartRevealing() {
+        val markerKey = RevealBlockKey(10)
 
-        assertEquals(
-            false,
-            streamingListMarkerVisible(
-                coordinatorActive = true,
-                firstRevealKey = currentItem,
-                startedRevealKeys = emptySet(),
-                containsImage = false,
-            ),
-        )
-        assertEquals(
-            true,
-            streamingListMarkerVisible(
-                coordinatorActive = true,
-                firstRevealKey = currentItem,
-                startedRevealKeys = setOf(currentItem),
-                containsImage = false,
-            ),
-        )
+        assertFalse(listMarkerVisible(revealActive = true, markerKey = markerKey, started = emptySet()))
+        assertTrue(listMarkerVisible(revealActive = true, markerKey = markerKey, started = setOf(markerKey)))
     }
 
     @Test
-    fun streamingListMarkerKeepsImageItemsVisibleAndSuppressesEmptyItems() {
-        assertEquals(
-            true,
-            streamingListMarkerVisible(
-                coordinatorActive = true,
-                firstRevealKey = null,
-                startedRevealKeys = emptySet(),
-                containsImage = true,
-            ),
-        )
-        assertEquals(
-            false,
-            streamingListMarkerVisible(
-                coordinatorActive = true,
-                firstRevealKey = null,
-                startedRevealKeys = emptySet(),
-                containsImage = false,
-            ),
+    fun listMarkerStaysHiddenForEmptyItemsUntilRevealEnds() {
+        // 图片已降级为行内链接，不再存在“项内无文字但因图片而恒可见”的特例；
+        // 空项在流式期间保持隐藏，非流式渲染不再隐藏任何 marker。
+        assertFalse(listMarkerVisible(revealActive = true, markerKey = null, started = emptySet()))
+        assertTrue(listMarkerVisible(revealActive = false, markerKey = null, started = null))
+        assertTrue(listMarkerVisible(revealActive = false, markerKey = RevealBlockKey(10), started = emptySet()))
+    }
+
+    private fun assertReplacementFallsBackToCompleteScan(previous: String, replacement: String) {
+        assertArrayEquals(
+            graphemeBoundaries(replacement),
+            updateGraphemeBoundaries(previous, graphemeBoundaries(previous), replacement),
         )
     }
 

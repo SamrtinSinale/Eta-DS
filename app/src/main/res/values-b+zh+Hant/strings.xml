@@ -34,9 +34,9 @@
   <string name="action_open_terminal">開啟終端機</string>
   <string name="action_open_browser">開啟瀏覽器</string>
   <string name="route_chat">對話</string>
+  <string name="action_launch_kimi_web">啟動 Kimi Web</string>
   <string name="route_browser">Agent 瀏覽器</string>
   <string name="route_tools">工具</string>
-  <string name="route_skills">Skills</string>
   <string name="route_permissions">權限</string>
   <string name="route_system_enhancements">系統增強</string>
   <string name="route_settings">設定</string>
@@ -295,6 +295,8 @@
   <string name="ui_linux_tool_environment_314d22">Linux 工具環境</string>
   <string name="settings_dsh_runtime_title">重裝對話執行階段</string>
   <string name="settings_dsh_runtime_summary">清掉已解包的 dsh 執行階段並重新展開（請在對話閒置時操作）</string>
+  <string name="settings_dsh_runtime_confirm">重裝會清掉 dsh 側自己的會話上下文（App 側歷史保留），請在對話閒置時操作。</string>
+  <string name="settings_dsh_runtime_busy">正在重新解包執行階段，請稍候</string>
   <string name="settings_dsh_runtime_done">對話執行階段已重裝</string>
   <string name="settings_dsh_runtime_failed">重裝失敗，請查看日誌</string>
   <string name="ui_the_entire_contents_of_memory_md_will_be_deleted_and_83a8ac">MEMORY.md 的全部內容將被刪除，記憶開關保持目前狀態。</string>
@@ -382,7 +384,17 @@
   <string name="ui_add_attachment_dba9e8">新增附件</string>
   <string name="ui_clear_84fcd7">清空</string>
   <string name="ui_clear_all_memory_a43bd3">清空全部記憶？</string>
-  <string name="ui_source_code_740296">原始碼</string>
+  <string name="ui_about_github_star_title">原始碼</string>
+  <string name="ui_about_github_star_hint">如果 Heta 幫到了你，請在 GitHub 點個 Star，這對我們意義重大</string>
+  <string name="ui_about_version_title">版本</string>
+  <string name="ui_about_update_title">檢查更新</string>
+  <string name="ui_about_update_checking">正在檢查…</string>
+  <string name="ui_about_feedback_title">問題回饋</string>
+  <string name="ui_update_already_latest">目前已是最新版本</string>
+  <string name="ui_update_check_failed">檢查更新失敗，請稍後重試</string>
+  <string name="ui_update_available_title">發現新版本</string>
+  <string name="ui_update_available_message">最新版本 %1$s，目前版本 %2$s</string>
+  <string name="ui_update_go_download">前往下載</string>
   <string name="ui_click_to_reinstall_dc60de">點選重新安裝</string>
   <string name="ui_environmental_status_5b32a1">環境狀態</string>
   <string name="ui_user_skills_748e7f">使用者安裝</string>
@@ -396,7 +408,6 @@
   <string name="ui_system_enhancement_dcd4ad">系統增強</string>
   <string name="ui_system_applications_have_voice_wake_up_permissions_f_0190f2">系統應用程式享有語音喚醒權限、較少的自啟動限制，體驗接近原生。將透過 Magisk / KernelSU 模組安裝，重新啟動後生效。</string>
   <string name="ui_system_prompt_word_193981">System prompt</string>
-  <string name="ui_result_0a2c91">結果</string>
   <string name="ui_absolute_path_9ac6fc">絕對路徑</string>
   <string name="ui_edit_a7f814">編輯</string>
   <string name="ui_edit_model_parameters_ba4864">編輯模型參數</string>
@@ -406,7 +417,6 @@
   <string name="ui_memory_b55ff5">記憶</string>
   <string name="ui_set_up_7debf9">設定</string>
   <string name="ui_access_7f5641">存取</string>
-  <string name="ui_this_value_is_used_for_session_clipping_and_context__c3f9e7">此值用於對話裁剪與內容預算；留空時使用遠端或官方目錄提供的值。</string>
   <string name="ui_input_file_path_36d474">輸入檔路徑</string>
   <string name="ui_return_11d024">返回</string>
   <string name="ui_connection_configuration_7d057b">連線設定</string>
@@ -451,8 +461,27 @@
     <item quantity="other">已完成 %d 個步驟</item>
   </plurals>
   <string name="work_completed">分析完成</string>
+  <string name="tool_elapsed_seconds">%1$d 秒</string>
+  <plurals name="tool_group_calls">
+    <item quantity="other">%d 次</item>
+  </plurals>
+  <plurals name="work_summary_thinking">
+    <item quantity="other">思考 %d 次</item>
+  </plurals>
+  <plurals name="work_summary_tools">
+    <item quantity="other">呼叫 %d 個工具</item>
+  </plurals>
+  <plurals name="work_summary_failed">
+    <item quantity="other">%d 個失敗</item>
+  </plurals>
   <string name="work_collapse">收合工作過程</string>
   <string name="work_expand">展開工作過程</string>
+  <string name="markdown_code_block">程式碼</string>
+  <string name="markdown_alert_note">說明</string>
+  <string name="markdown_alert_tip">提示</string>
+  <string name="markdown_alert_important">重要</string>
+  <string name="markdown_alert_warning">警告</string>
+  <string name="markdown_alert_caution">注意</string>
   <string name="copy_copied">已複製</string>
   <string name="copy_answer">複製回答</string>
   <string name="copy_code">複製程式碼</string>
@@ -522,7 +551,6 @@
   <string name="page_root_environment_is_missing_available_busybox_or_nec_76f454">Root 環境缺少可用的 BusyBox 或必要 applet</string>
   <string name="page_ready_7cca0c">} 已就緒</string>
   <string name="page_context_unknown_b6ae7b">內容長度未知</string>
-  <string name="page_the_context_length_must_be_a_positive_integer_06ca7a">內容長度上限必須是正整數</string>
   <string name="page_download_the_alpine_base_environment_8433ea">下載 Alpine 基礎環境</string>
   <string name="page_download_and_install_f4df99">下載並安裝</string>
   <string name="page_not_supported_ef8274">不支援</string>
@@ -662,7 +690,6 @@
   <string name="page_use_standard_chat_completions_ee4b1a">使用 Chat Completions API</string>
   <string name="page_using_typed_items_with_semantic_streaming_events_f9c906">使用 Responses API、typed Items 與語意化串流事件</string>
   <string name="voice_input_request">輸入要求</string>
-  <string name="voice_reasoning">Heta 正在思考</string>
   <string name="voice_completed">已完成</string>
   <string name="voice_failed">Heta 執行失敗</string>
   <string name="voice_running_tool">Heta 正在執行 %1$s</string>
@@ -917,7 +944,6 @@
   <plurals name="provider_models_selected">
     <item quantity="other">已選取 %d 個</item>
   </plurals>
-  <string name="provider_auto_context">自動：%1$s tokens</string>
   <string name="provider_auto_reasoning_supported">自動：支援思考</string>
   <string name="provider_auto_reasoning_unknown">自動：不支援或未知</string>
   <string name="provider_context_tag">%1$s 內容脈絡</string>
@@ -1199,7 +1225,6 @@
   <string name="speech_region_beijing">北京</string>
   <string name="speech_region_singapore">新加坡</string>
   <string name="speech_access_token">Access Token</string>
-  <string name="speech_api_key">API Key</string>
   <string name="speech_app_id">App ID</string>
   <string name="speech_base_url">服務地址</string>
   <string name="speech_qwen_base_url_hint">服務地址（留空使用地域預設地址）</string>
@@ -1215,8 +1240,44 @@
   <string name="speech_voice">音色</string>
   <string name="speech_voice_custom">自訂音色</string>
   <string name="speech_voice_id">音色 ID</string>
+  <string name="speech_voice_female">女聲</string>
+  <string name="speech_voice_male">男聲</string>
+  <string name="speech_voice_beijing_male">北京話男聲</string>
+  <string name="speech_voice_shanghai_female">上海話女聲</string>
+  <string name="speech_voice_qwen_cherry">芊悅</string>
+  <string name="speech_voice_qwen_serena">蘇瑤</string>
+  <string name="speech_voice_qwen_ethan">晨煦</string>
+  <string name="speech_voice_qwen_chelsie">千雪</string>
+  <string name="speech_voice_qwen_momo">茉兔</string>
+  <string name="speech_voice_qwen_vivian">十三</string>
+  <string name="speech_voice_qwen_moon">月白</string>
+  <string name="speech_voice_qwen_maia">四月</string>
+  <string name="speech_voice_qwen_kai">凱</string>
+  <string name="speech_voice_qwen_nofish">不吃魚</string>
+  <string name="speech_voice_qwen_bella">萌寶</string>
+  <string name="speech_voice_qwen_katerina">卡捷琳娜</string>
+  <string name="speech_voice_qwen_vincent">田叔</string>
+  <string name="speech_voice_qwen_neil">阿聞</string>
+  <string name="speech_voice_qwen_dylan">曉東</string>
+  <string name="speech_voice_qwen_jada">阿珍</string>
+  <string name="speech_voice_doubao_vv">Vivi</string>
+  <string name="speech_voice_doubao_xiaohe">小何</string>
+  <string name="speech_voice_doubao_yunzhou">雲舟</string>
+  <string name="speech_voice_doubao_xiaotian">小天</string>
+  <string name="speech_voice_doubao_liufei">劉飛</string>
+  <string name="speech_voice_doubao_qingxin">清新女聲</string>
+  <string name="speech_voice_doubao_cancan">知性燦燦</string>
+  <string name="speech_voice_doubao_xiaoyuan">甜美小源</string>
+  <string name="speech_voice_doubao_taozi">甜美桃子</string>
+  <string name="speech_voice_doubao_sisi">爽快思思</string>
+  <string name="speech_voice_doubao_linjia">鄰家女孩</string>
+  <string name="speech_voice_doubao_zixin">少年梓辛</string>
+  <string name="speech_voice_doubao_ahu">溫暖阿虎</string>
+  <string name="speech_voice_doubao_yichen">儒雅逸辰</string>
+  <string name="speech_voice_doubao_xiaoming">解說小明</string>
+  <string name="speech_voice_doubao_podcast">深夜播客</string>
   <string name="speech_qwen_voice_note">模型：qwen3-tts-flash。音色須支援該模型。</string>
-  <string name="speech_doubao_voice_note">模型：豆包語音合成 2.0。音色 ID 可從控制台音色庫複製。</string>
+  <string name="speech_doubao_voice_note">模型：豆包語音合成 2.0。</string>
   <string name="speech_test_recognition">測試識別</string>
   <string name="speech_test_finish">完成錄音</string>
   <string name="speech_test_note">測試會調用所選服務，可能產生費用；使用當前填寫的配置，不會自動儲存。</string>
@@ -1243,4 +1304,5 @@
   <string name="speech_test_result">識別結果：%1$s</string>
   <string name="speech_credentials_lost">語音憑據無法解密，請重新填寫並儲存</string>
   <string name="speech_save_retry">請重試</string>
+  <string name="system_notice_model_retry">模型請求重試</string>
 </resources>

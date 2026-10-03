@@ -99,10 +99,31 @@ class SpeechPlaybackTest {
         assertNull(playback.state.value.messageId)
     }
 
+    @Test fun successfulSynthesisFinishesInputBeforeWaitingForPlayback() {
+        val output = FakeOutput()
+        val controller = SpeechPlaybackController(context, scope,
+            synthesize = { _, _, _, audio -> audio(byteArrayOf(1, 2)) },
+            createOutput = { output },
+        )
+        try {
+            controller.speak("short", "简短回答", SpeechSettings(tts = TtsProvider.QWEN), SpeechCredentials(qwenTts = "test-key"))
+            val deadline = System.nanoTime() + 3_000_000_000
+            while (!output.closed && System.nanoTime() < deadline) {
+                shadowOf(Looper.getMainLooper()).idle()
+                Thread.sleep(1)
+            }
+            assertTrue(output.finished)
+            assertTrue(output.closed)
+            assertNull(controller.state.value.error)
+        } finally { controller.stop() }
+    }
+
     private class FakeOutput : SpeechAudioOutput {
         var closed = false
+        var finished = false
         override fun write(bytes: ByteArray) { check(!closed) }
-        override fun drained() = true
+        override fun finish() { check(!closed); finished = true }
+        override fun drained(): Boolean { check(finished); return true }
         override fun close() { closed = true }
     }
 }

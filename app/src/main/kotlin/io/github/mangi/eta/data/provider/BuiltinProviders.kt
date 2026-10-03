@@ -7,9 +7,46 @@ import io.github.mangi.eta.data.model.ProviderSetting
 import io.github.mangi.eta.data.model.ProviderSourceTypes
 
 internal object BuiltinProviders {
-    const val DEFAULT_SYSTEM_PROMPT =
-        "你是 Heta，运行在 Android 设备上的 AI 助手。你可以回答问题、与用户交流，也可以通过当前可用的工具了解设备情况并执行操作。" +
-            "回答使用用户的语言，简洁、直接、自然。"
+    /**
+     * 默认提示词的历史版本，**从旧到新**；当前默认永远取最后一条。
+     *
+     * 以后改默认值只需要往这里 append 一行。上一版是"当前默认 + 手写三个旧值"，于是改完默认值
+     * 之后，刚被替换掉的那份立刻变成"不在集合里的滞留文本"，还得再补一次迁移 —— Eda → Heta
+     * 这次就是这么来的（用户设置里那句 "你是 Eda，…" 一直留着）。
+     */
+    internal val DEFAULT_SYSTEM_PROMPT_HISTORY: List<String> = listOf(
+        // feb618c：更早的"手机 Agent"版
+        "你是运行在 Android 设备上的手机 Agent。回答要简洁、直接，并保留必要的操作上下文。",
+        // 8c7420a：改名为 Eta
+        "你是 Eta，运行在 Android 设备上的 AI 助手。你可以回答问题、与用户交流，也可以通过当前可用的工具了解设备情况并执行操作。回答使用用户的语言，简洁、直接、自然。",
+        // ff336f8：「rebrand to Eda」
+        "你是 Eda，运行在 Android 设备上的 AI 助手。你可以回答问题、与用户交流，也可以通过当前可用的工具了解设备情况并执行操作。回答使用用户的语言，简洁、直接、自然。",
+        // c740df7 起：「rebrand: Eda -> Heta」
+        "你是 Heta，运行在 Android 设备上的 AI 助手。你可以回答问题、与用户交流，也可以通过当前可用的工具了解设备情况并执行操作。回答使用用户的语言，简洁、直接、自然。",
+    )
+
+    val DEFAULT_SYSTEM_PROMPT: String = DEFAULT_SYSTEM_PROMPT_HISTORY.last()
+
+    /**
+     * 旧默认值集合：历史里除最后一条（当前）以外的全部。
+     *
+     * 用途只有一个：**精确**认出"用户从没改过、还留着旧默认值"的 provider，把它升级成当前默认。
+     * 默认值只对**新建**的 provider 生效，已经存在设备里的那份不会跟着改。
+     */
+    internal val LEGACY_DEFAULT_SYSTEM_PROMPTS: Set<String> =
+        DEFAULT_SYSTEM_PROMPT_HISTORY.dropLast(1).toSet()
+
+    /**
+     * 需要把 [stored] 升级成当前默认时返回新值，否则返回 null。
+     *
+     * 判据是"**恰好**等于某个旧默认值"（两端空白不计）。用户自己编辑过的提示词永远不动 ——
+     * 哪怕只是加了一句话。
+     */
+    internal fun migratedSystemPrompt(stored: String?): String? {
+        val normalized = stored?.trim().orEmpty()
+        if (normalized.isEmpty()) return null
+        return if (normalized in LEGACY_DEFAULT_SYSTEM_PROMPTS) DEFAULT_SYSTEM_PROMPT else null
+    }
 
     const val OPENAI_ID = "builtin-openai"
     const val ANTHROPIC_ID = "builtin-anthropic"

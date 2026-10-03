@@ -132,7 +132,7 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
     private var presentedEntryGeneration = -1L
     private var entryScreenContext: EtaAssistantScreenContext? = null
     private var hiddenForForegroundOperation = false
-    private var handoffInProgress = false
+    private var handoffInProgress by mutableStateOf(false)
     private var handoffExitRequested by mutableStateOf(false)
     private var inputText by mutableStateOf("")
     private var inputFocusRequestKey by mutableIntStateOf(-1)
@@ -155,7 +155,9 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
                 if (state.preview.isNotBlank()) inputText = state.preview
                 speechState = EtaSpeechState(
                     phase = state.phase,
-                    message = state.error ?: state.progress.takeIf { it.isNotBlank() && state.phase != EtaSpeechPhase.LISTENING },
+                    // 连接、聆听、识别中的阶段播报由语音条目与波形承担，反馈条只保留
+                    // 错误和空闲态的模型下载消息，避免与语音界面重复叙事。
+                    message = state.error ?: state.progress.takeIf { it.isNotBlank() && state.phase == EtaSpeechPhase.IDLE },
                     downloadAvailable = state.downloadAvailable,
                     configureAvailable = state.error != null && !state.downloadAvailable,
                     feedbackIsError = state.error != null,
@@ -302,6 +304,7 @@ internal class EtaAssistantOverlayService : Service(), LifecycleOwner, SavedStat
                             uiState.messages.any { message ->
                                 message is AgentMessageUi && message.content.isNotBlank()
                             },
+                        handoffRunning = handoffInProgress,
                         exitRequested = handoffExitRequested,
                         onOpenConversation = ::openConversation,
                     )

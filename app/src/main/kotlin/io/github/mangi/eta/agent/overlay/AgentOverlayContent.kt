@@ -73,15 +73,13 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.mikepenz.markdown.m3.Markdown
-import com.mikepenz.markdown.m3.markdownTypography
-import com.mikepenz.markdown.model.rememberMarkdownState
+import io.github.mangi.eta.ui.markdown.MarkdownTone
+import io.github.mangi.eta.ui.markdown.StaticMarkdown
 import io.github.mangi.eta.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -598,7 +596,6 @@ internal fun AgentResultCard(
         if (isFailed) R.string.overlay_substatus_failed else R.string.overlay_substatus_finished,
     )
     val content = state.detailText.ifBlank { statusText }
-    val textColor = MiuixTheme.colorScheme.onSurface
 
     Box(
         modifier = Modifier
@@ -669,35 +666,13 @@ internal fun AgentResultCard(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     // Markdown 结果，可滚动
-                    val markdownState = rememberMarkdownState(content = content, retainState = true)
-                    val typography = markdownTypography(
-                        h1 = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, color = textColor),
-                        h2 = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold, color = textColor),
-                        h3 = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold, color = textColor),
-                        text = TextStyle(fontSize = 16.sp, lineHeight = 22.sp, color = textColor),
-                        paragraph = TextStyle(fontSize = 16.sp, lineHeight = 22.sp, color = textColor),
-                        ordered = TextStyle(fontSize = 16.sp, lineHeight = 22.sp, color = textColor),
-                        bullet = TextStyle(fontSize = 16.sp, lineHeight = 22.sp, color = textColor),
-                        list = TextStyle(fontSize = 16.sp, lineHeight = 22.sp, color = textColor),
-                        code = TextStyle(
-                            fontSize = 13.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = textColor,
-                        ),
-                    )
-                    Markdown(
-                        markdownState = markdownState,
-                        typography = typography,
+                    StaticMarkdown(
+                        content = content,
+                        tone = MarkdownTone.Answer,
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(max = 280.dp)
                             .verticalScroll(rememberScrollState()),
-                        loading = {
-                            Text(text = content, color = textColor, fontSize = 16.sp, modifier = it)
-                        },
-                        error = {
-                            Text(text = content, color = textColor, fontSize = 16.sp, modifier = it)
-                        },
                     )
                 }
             }

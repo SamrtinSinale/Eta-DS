@@ -95,10 +95,11 @@ internal class AgentExecutionService : Service() {
             this, 1, Intent(this, AgentExecutionService::class.java).setAction(ACTION_STOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+        val taskCount = leases.count()
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(getString(R.string.execution_title))
-            .setContentText(getString(R.string.execution_summary, leases.count()))
+            .setContentText(resources.getQuantityString(R.plurals.execution_summary, taskCount, taskCount))
             .setContentIntent(open)
             .setOngoing(true)
             .setOnlyAlertOnce(true)

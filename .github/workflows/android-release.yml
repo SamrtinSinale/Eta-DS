@@ -270,6 +270,13 @@ jobs:
       - name: 安装 Android SDK 37
         run: sdkmanager --channel=3 "platforms;android-37.0"
 
+      # 这两类问题只在编译期暴露，白等一轮 CI；先在脚本层挡掉（判定都很保守，不误报）。
+      - name: 单元测试 import 自检
+        run: python3 scripts/check-junit-imports.py
+
+      - name: Kotlin 注释嵌套自检
+        run: python3 scripts/check-kotlin-comment-nesting.py
+
       - name: 运行单元测试
         run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
 
@@ -285,6 +292,22 @@ jobs:
           fi
           echo "用生成的脚本：$generated"
           sudo bash scripts/test-dsh-purge.sh "$generated"
+
+      # 端到端：真运行时资产 + 真 overlay + 真 chroot（qemu）+ 假模型，断言 dsh 真的执行了
+      # 一个 bash 工具并正常收尾。binfmt 在脚本内部的用户命名空间里注册，不动 runner。
+      - name: 安装 qemu-user-static（端到端冒烟用）
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq qemu-user-static
+
+      - name: dsh 端到端冒烟测试（真跑一个工具回合）
+        run: |
+          set -euo pipefail
+          overlay="$(find . -name dsh-e2e-overlay.patch.yml -print -quit)"
+          if [ -z "$overlay" ]; then
+            echo "::error::没找到单测导出的 dsh-e2e-overlay.patch.yml"
+            exit 1
+          fi
+          echo "用单测导出的 overlay：$overlay"
+          DSH_E2E_OVERLAY="$overlay" bash scripts/test-dsh-e2e.sh
 
       - name: 输出失败详情
         if: always()

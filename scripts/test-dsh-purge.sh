@@ -36,8 +36,11 @@ grep -q "$PLACEHOLDER" "$GENERATED" || {
 
 WORK="$(mktemp -d /tmp/dsh-purge-test.XXXXXX)"
 cleanup() {
-  awk -v p="$WORK" 'index($5, p) == 1 { print $5 }' /proc/self/mountinfo 2>/dev/null |
-    sort -r | while read -r m; do umount -l "$m" 2>/dev/null; done
+  # 和运行时脚本同一套匹配：mountinfo 里记的是解析后的路径，且必须是路径边界
+  awk '{print $5}' /proc/self/mountinfo 2>/dev/null | while read -r m; do
+    cm=$(readlink -f "$m" 2>/dev/null || echo "$m")
+    case "$cm" in "$WORK"|"$WORK"/*) umount -l "$m" 2>/dev/null ;; esac
+  done
   rm -rf "$WORK"
 }
 trap cleanup EXIT

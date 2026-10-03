@@ -36,9 +36,10 @@
   <string name="action_open_terminal">Open terminal</string>
   <string name="action_open_browser">Open browser</string>
   <string name="route_chat">Chat</string>
+  <string name="action_launch_kimi_web">Launch Kimi Web</string>
   <string name="route_browser">Agent browser</string>
   <string name="route_tools">Tools</string>
-  <string name="route_skills">Skills</string>
+  <string name="route_skills" translatable="false">Skills</string>
   <string name="route_permissions">Permissions</string>
   <string name="route_system_enhancements">System enhancements</string>
   <string name="route_settings">Settings</string>
@@ -276,7 +277,7 @@
   <string name="system_notice_stopped">Stopped</string>
   <string name="system_notice_empty_result">The run completed without a text response.</string>
   <string name="system_notice_runtime_failed">Runtime failed</string>
-  <string name="system_notice_model_retry">模型请求重试</string>
+  <string name="system_notice_model_retry">Retrying model request</string>
   <string name="conversation_persistence_failed">Couldn’t save the conversation. Please try again.</string>
   <string name="system_notice_interrupted">The run was interrupted. Partial output is preserved; unfinished actions were not retried.</string>
   <string name="tool_status_unknown">Result unknown</string>
@@ -302,7 +303,6 @@
   <string name="voice_model_download_failed">Could not download the speech model</string>
   <string name="voice_request_failed">The request failed. Please try again.</string>
   <string name="voice_input_request">Enter a request</string>
-  <string name="voice_reasoning">Heta is reasoning</string>
   <string name="voice_completed">Completed</string>
   <string name="voice_failed">Heta failed to complete the task</string>
   <string name="voice_running_tool">Heta is running %1$s</string>
@@ -319,6 +319,8 @@
   <string name="ui_linux_tool_environment_314d22">Linux tool environment</string>
   <string name="settings_dsh_runtime_title">Reinstall chat runtime</string>
   <string name="settings_dsh_runtime_summary">Wipe the unpacked dsh runtime and unpack it again (do this when no chat is running)</string>
+  <string name="settings_dsh_runtime_confirm">Reinstall the chat runtime? dsh-side context (its own session history) will be reset; App-side history is kept. Run it while no chat is in progress.</string>
+  <string name="settings_dsh_runtime_busy">Unpacking the runtime, this takes a while</string>
   <string name="settings_dsh_runtime_done">Chat runtime reinstalled</string>
   <string name="settings_dsh_runtime_failed">Reinstall failed, check the log</string>
   <string name="ui_the_entire_contents_of_memory_md_will_be_deleted_and_83a8ac">The entire contents of MEMORY.md will be deleted and the memory switch will remain in its current state.</string>
@@ -406,7 +408,17 @@
   <string name="ui_add_attachment_dba9e8">Add attachment</string>
   <string name="ui_clear_84fcd7">Clear</string>
   <string name="ui_clear_all_memory_a43bd3">Clear all memory?</string>
-  <string name="ui_source_code_740296">source code</string>
+  <string name="ui_about_github_star_title">Source Code</string>
+  <string name="ui_about_github_star_hint">If Heta helps you, please star it on GitHub — it means a lot to us</string>
+  <string name="ui_about_version_title">Version</string>
+  <string name="ui_about_update_title">Check for updates</string>
+  <string name="ui_about_update_checking">Checking…</string>
+  <string name="ui_about_feedback_title">Feedback</string>
+  <string name="ui_update_already_latest">Already on the latest version</string>
+  <string name="ui_update_check_failed">Update check failed. Try again later</string>
+  <string name="ui_update_available_title">Update available</string>
+  <string name="ui_update_available_message">Latest version %1$s, current version %2$s</string>
+  <string name="ui_update_go_download">Download</string>
   <string name="ui_click_to_reinstall_dc60de">Click to reinstall</string>
   <string name="ui_environmental_status_5b32a1">Environment status</string>
   <string name="ui_user_skills_748e7f">Installed by you</string>
@@ -420,7 +432,6 @@
   <string name="ui_system_enhancement_dcd4ad">System enhancement</string>
   <string name="ui_system_applications_have_voice_wake_up_permissions_f_0190f2">System applications have voice wake-up permissions, fewer self-start restrictions, and the experience is close to native. Will be installed via Magisk/KernelSU module and will take effect after reboot.</string>
   <string name="ui_system_prompt_word_193981">System prompt</string>
-  <string name="ui_result_0a2c91">result</string>
   <string name="ui_absolute_path_9ac6fc">absolute path</string>
   <string name="ui_edit_a7f814">edit</string>
   <string name="ui_edit_model_parameters_ba4864">Edit model parameters</string>
@@ -430,7 +441,6 @@
   <string name="ui_memory_b55ff5">Memory</string>
   <string name="ui_set_up_7debf9">set up</string>
   <string name="ui_access_7f5641">Access</string>
-  <string name="ui_this_value_is_used_for_session_clipping_and_context__c3f9e7">This value is used for session clipping and context budgeting. When left blank, the remote or official directory value is used.</string>
   <string name="ui_input_file_path_36d474">input file path</string>
   <string name="ui_return_11d024">return</string>
   <string name="ui_connection_configuration_7d057b">Connection</string>
@@ -477,8 +487,31 @@
     <item quantity="other">Completed %d steps</item>
   </plurals>
   <string name="work_completed">Analysis complete</string>
+  <string name="tool_elapsed_seconds">%1$ds</string>
+  <plurals name="tool_group_calls">
+    <item quantity="one">%d call</item>
+    <item quantity="other">%d calls</item>
+  </plurals>
+  <plurals name="work_summary_thinking">
+    <item quantity="one">Thought %d time</item>
+    <item quantity="other">Thought %d times</item>
+  </plurals>
+  <plurals name="work_summary_tools">
+    <item quantity="one">%d tool call</item>
+    <item quantity="other">%d tool calls</item>
+  </plurals>
+  <plurals name="work_summary_failed">
+    <item quantity="one">%d failed</item>
+    <item quantity="other">%d failed</item>
+  </plurals>
   <string name="work_collapse">Collapse work details</string>
   <string name="work_expand">Expand work details</string>
+  <string name="markdown_code_block">Code</string>
+  <string name="markdown_alert_note">Note</string>
+  <string name="markdown_alert_tip">Tip</string>
+  <string name="markdown_alert_important">Important</string>
+  <string name="markdown_alert_warning">Warning</string>
+  <string name="markdown_alert_caution">Caution</string>
   <string name="copy_copied">Copied</string>
   <string name="copy_answer">Copy answer</string>
   <string name="copy_code">Copy code</string>
@@ -549,7 +582,6 @@
   <string name="page_root_environment_is_missing_available_busybox_or_nec_76f454">Root environment is missing available BusyBox or necessary applets</string>
   <string name="page_ready_7cca0c">} Ready</string>
   <string name="page_context_unknown_b6ae7b">context unknown</string>
-  <string name="page_the_context_length_must_be_a_positive_integer_06ca7a">The context window must be a positive integer</string>
   <string name="page_download_the_alpine_base_environment_8433ea">Download the Alpine base environment</string>
   <string name="page_download_and_install_f4df99">Download and install</string>
   <string name="page_not_supported_ef8274">Not supported</string>
@@ -942,7 +974,6 @@
     <item quantity="one">%d selected</item>
     <item quantity="other">%d selected</item>
   </plurals>
-  <string name="provider_auto_context">Auto: %1$s tokens</string>
   <string name="provider_auto_reasoning_supported">Auto: supports reasoning</string>
   <string name="provider_auto_reasoning_unknown">Auto: unsupported or unknown</string>
   <string name="provider_context_tag">%1$s context</string>
@@ -1228,7 +1259,7 @@
   <string name="speech_region_beijing">Beijing</string>
   <string name="speech_region_singapore">Singapore</string>
   <string name="speech_access_token">Access Token</string>
-  <string name="speech_api_key">API Key</string>
+  <string name="speech_api_key" translatable="false">API Key</string>
   <string name="speech_app_id">App ID</string>
   <string name="speech_base_url">Base URL</string>
   <string name="speech_qwen_base_url_hint">Base URL (leave empty for the region default)</string>
@@ -1244,8 +1275,44 @@
   <string name="speech_voice">Voice</string>
   <string name="speech_voice_custom">Custom voice</string>
   <string name="speech_voice_id">Voice ID</string>
+  <string name="speech_voice_female">Female</string>
+  <string name="speech_voice_male">Male</string>
+  <string name="speech_voice_beijing_male">Beijing dialect, male</string>
+  <string name="speech_voice_shanghai_female">Shanghai dialect, female</string>
+  <string name="speech_voice_qwen_cherry">Cherry</string>
+  <string name="speech_voice_qwen_serena">Serena</string>
+  <string name="speech_voice_qwen_ethan">Ethan</string>
+  <string name="speech_voice_qwen_chelsie">Chelsie</string>
+  <string name="speech_voice_qwen_momo">Momo</string>
+  <string name="speech_voice_qwen_vivian">Vivian</string>
+  <string name="speech_voice_qwen_moon">Moon</string>
+  <string name="speech_voice_qwen_maia">Maia</string>
+  <string name="speech_voice_qwen_kai">Kai</string>
+  <string name="speech_voice_qwen_nofish">Nofish</string>
+  <string name="speech_voice_qwen_bella">Bella</string>
+  <string name="speech_voice_qwen_katerina">Katerina</string>
+  <string name="speech_voice_qwen_vincent">Vincent</string>
+  <string name="speech_voice_qwen_neil">Neil</string>
+  <string name="speech_voice_qwen_dylan">Dylan</string>
+  <string name="speech_voice_qwen_jada">Jada</string>
+  <string name="speech_voice_doubao_vv">Vivi</string>
+  <string name="speech_voice_doubao_xiaohe">Xiaohe</string>
+  <string name="speech_voice_doubao_yunzhou">Yunzhou</string>
+  <string name="speech_voice_doubao_xiaotian">Xiaotian</string>
+  <string name="speech_voice_doubao_liufei">Liufei</string>
+  <string name="speech_voice_doubao_qingxin">Fresh Voice</string>
+  <string name="speech_voice_doubao_cancan">Cancan</string>
+  <string name="speech_voice_doubao_xiaoyuan">Xiaoyuan</string>
+  <string name="speech_voice_doubao_taozi">Taozi</string>
+  <string name="speech_voice_doubao_sisi">Sisi</string>
+  <string name="speech_voice_doubao_linjia">Girl Next Door</string>
+  <string name="speech_voice_doubao_zixin">Zixin</string>
+  <string name="speech_voice_doubao_ahu">Ahu</string>
+  <string name="speech_voice_doubao_yichen">Yichen</string>
+  <string name="speech_voice_doubao_xiaoming">Xiaoming</string>
+  <string name="speech_voice_doubao_podcast">Late Night Podcast</string>
   <string name="speech_qwen_voice_note">Model: qwen3-tts-flash. The voice must support this model.</string>
-  <string name="speech_doubao_voice_note">Model: Doubao Speech Synthesis 2.0. Copy a voice ID from the console voice library.</string>
+  <string name="speech_doubao_voice_note">Model: Doubao Speech Synthesis 2.0.</string>
   <string name="speech_test_recognition">Test recognition</string>
   <string name="speech_test_finish">Finish recording</string>
   <string name="speech_test_note">Testing calls the selected service and may incur charges. It uses the current form values and does not save them.</string>

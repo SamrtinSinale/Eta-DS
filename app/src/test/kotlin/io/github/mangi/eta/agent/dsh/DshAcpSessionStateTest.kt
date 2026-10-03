@@ -85,8 +85,8 @@ class DshAcpSessionStateTest {
         assertFalse(canResume(stored, original.drop(2)))
 
         // 换模型：旧会话里记的是旧模型，不能接着跑。
-        assertFalse(DshAcpSessionStateCodec.canResume(stored, original, "另一个模型", route))
-        assertFalse(DshAcpSessionStateCodec.canResume(stored, original, model, "另一个路由"))
+        assertFalse(DshAcpSessionStateCodec.canResume(stored, original, "另一个模型"))
+        // 路由变化不参与续接判定：那条守卫曾是恒为假的死代码（见 canResume 的注释）。
 
         // 会话 id 空（从未建过）时也不能续接。
         assertFalse(canResume(persisted("", original), original))
@@ -190,7 +190,7 @@ class DshAcpSessionStateTest {
     private fun canResume(
         persisted: DshAcpSessionState,
         history: List<AgentModelClient.ConversationMessage>,
-    ) = DshAcpSessionStateCodec.canResume(persisted, history, model, route)
+    ) = DshAcpSessionStateCodec.canResume(persisted, history, model)
 
     private fun conversation(turns: Int): List<AgentModelClient.ConversationMessage> =
         buildList {

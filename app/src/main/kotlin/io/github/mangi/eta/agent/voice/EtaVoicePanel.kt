@@ -1,8 +1,10 @@
 package io.github.mangi.eta.agent.voice
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -35,7 +37,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -55,6 +56,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import io.github.mangi.eta.ui.components.AgentConversationMessages
@@ -99,6 +101,7 @@ internal data class EtaVoicePanelColors(
     val inputTertiary: Color,
     val tertiary: Color,
     val panelStroke: Color,
+    val chipStroke: Color,
     val scrim: Color,
 )
 
@@ -116,6 +119,7 @@ private fun rememberEtaVoicePanelColors(): EtaVoicePanelColors {
                 inputTertiary = Color(0x4DFFFFFF),
                 tertiary = Color(0x40FFFFFF),
                 panelStroke = Color(0x0AFFFFFF),
+                chipStroke = Color(0x21FFFFFF),
                 scrim = Color(0x52000000),
             )
         } else {
@@ -128,6 +132,7 @@ private fun rememberEtaVoicePanelColors(): EtaVoicePanelColors {
                 inputTertiary = Color(0x42000000),
                 tertiary = Color(0x29000000),
                 panelStroke = Color.White,
+                chipStroke = Color(0x14000000),
                 scrim = Color(0x30000000),
             )
         }
@@ -147,6 +152,7 @@ internal fun EtaVoicePanel(
     onKeyboard: () -> Unit,
     inputFocusRequestKey: Int,
     canOpenConversation: Boolean,
+    handoffRunning: Boolean,
     exitRequested: Boolean,
     onInputChange: (String) -> Unit,
     onSuggestionClick: (String) -> Unit,
@@ -233,6 +239,7 @@ internal fun EtaVoicePanel(
                 colors = colors,
                 focusRequester = focusRequester,
                 canOpenConversation = canOpenConversation,
+                handoffRunning = handoffRunning,
                 baseContentHeightPx = assistantBaseHeightPx(
                     messages = state.messages,
                     maxHeightPx = maxContentHeightPx,
@@ -272,6 +279,7 @@ private fun BoxScope.AssistantPanel(
     colors: EtaVoicePanelColors,
     focusRequester: FocusRequester,
     canOpenConversation: Boolean,
+    handoffRunning: Boolean,
     baseContentHeightPx: Float,
     maxContentHeightPx: Float,
     bottomInsetPx: Int,
@@ -286,22 +294,18 @@ private fun BoxScope.AssistantPanel(
 ) {
     val density = LocalDensity.current
     val haptic = LocalHapticFeedback.current
-    val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     var settledHeightPx by remember { mutableFloatStateOf(baseContentHeightPx) }
     var draggedHeightPx by remember { mutableStateOf<Float?>(null) }
     var autoExpandSuppressed by remember { mutableStateOf(false) }
     var dismissPullPx by remember { mutableFloatStateOf(0f) }
     var handoffPullPx by remember { mutableFloatStateOf(0f) }
-    var directHandoffPullPx by remember { mutableFloatStateOf(0f) }
     var thresholdHapticSent by remember { mutableStateOf(false) }
-    var handoffRunning by remember { mutableStateOf(false) }
     var keepBottomAnchored by remember { mutableStateOf(true) }
     var fittedReplyId by remember { mutableStateOf<String?>(null) }
-    val handoffThresholdPx = with(density) { 72.dp.toPx() }
-    val directHandoffThresholdPx = with(density) { 48.dp.toPx() }
+    // 满高时把手与状态栏之间的空间有限，需在扣除触摸 slop 后仍能完成过顶手势。
+    val handoffThresholdPx = with(density) { 24.dp.toPx() }
     val dismissThresholdPx = with(density) { 92.dp.toPx() }
-    val handoffVelocityPx = with(density) { 900.dp.toPx() }
     val autoSettleTolerancePx = with(density) { 8.dp.toPx() }
     val overflowTolerancePx = with(density) { 16.dp.toPx() }
     val minimumContentHeightPx = with(density) { 140.dp.toPx() }.coerceAtMost(maxContentHeightPx)
@@ -350,12 +354,11 @@ private fun BoxScope.AssistantPanel(
             (maxContentHeightPx - imeOverlapPx).coerceAtLeast(0f),
         )
     val nearFullscreen = sheetHeightPx >= maxContentHeightPx * 0.88f
-    val handoffReady = canOpenConversation && nearFullscreen &&
-        (handoffPullPx >= handoffThresholdPx ||
-            directHandoffPullPx >= directHandoffThresholdPx)
-    val sheetTranslationPx = dismissPullPx * 0.28f - handoffPullPx.coerceAtMost(
-        with(density) { 28.dp.toPx() },
-    ) * 0.12f
+    // 接管只认把手发起的过顶拉取：列表滚动与惯性 fling 不再触发，避免读回复时误入本体。
+    val handoffReady = canOpenConversation && nearFullscreen && handoffPullPx >= handoffThresholdPx
+    // 过顶拉取的橡皮筋位移要肉眼可见，用户才知道继续拉会进入本体。
+    val sheetTranslationPx = dismissPullPx * 0.28f - (handoffPullPx * 0.36f)
+        .coerceAtMost(with(density) { 40.dp.toPx() })
 
     LaunchedEffect(hasMessages, minimumContentHeightPx, maxContentHeightPx) {
         settledHeightPx = if (hasMessages) {
@@ -437,13 +440,11 @@ private fun BoxScope.AssistantPanel(
 
     fun triggerHandoff() {
         if (handoffRunning || !canOpenConversation) return
-        handoffRunning = true
         settledHeightPx = maxContentHeightPx
         draggedHeightPx = null
-        scope.launch {
-            delay(120)
-            onOpenConversation()
-        }
+        dismissPullPx = 0f
+        handoffPullPx = 0f
+        onOpenConversation()
     }
 
     fun stopAutoExpand() {
@@ -454,20 +455,22 @@ private fun BoxScope.AssistantPanel(
         }
     }
 
-    fun dragBy(deltaY: Float): Float {
+    fun dragBy(deltaY: Float, allowHandoff: Boolean = false): Float {
         if (handoffRunning || state.messages.isEmpty()) return 0f
         val current = draggedHeightPx ?: currentAnimatedHeight.value
-        val requested = current - deltaY
+        val requested = current + handoffPullPx - dismissPullPx - deltaY
         val minimumDragHeightPx = minOf(baseContentHeightPx, settledHeightPx)
         return when {
             requested > maxContentHeightPx -> {
                 draggedHeightPx = maxContentHeightPx
-                if (deltaY < 0f) handoffPullPx += -deltaY
-                deltaY
+                dismissPullPx = 0f
+                handoffPullPx = if (allowHandoff) requested - maxContentHeightPx else 0f
+                if (allowHandoff) deltaY else current - maxContentHeightPx
             }
             requested < minimumDragHeightPx -> {
                 draggedHeightPx = minimumDragHeightPx
-                if (deltaY > 0f) dismissPullPx += deltaY
+                dismissPullPx = minimumDragHeightPx - requested
+                handoffPullPx = 0f
                 deltaY
             }
             else -> {
@@ -479,12 +482,14 @@ private fun BoxScope.AssistantPanel(
         }
     }
 
-    fun finishDrag(velocityY: Float = 0f) {
+    fun finishDrag(commit: Boolean = true, allowHandoff: Boolean = false) {
+        if (handoffRunning) return
         val current = draggedHeightPx ?: currentAnimatedHeight.value
         when {
-            dismissPullPx >= dismissThresholdPx -> onClose()
-            canOpenConversation && current >= maxContentHeightPx * 0.88f &&
-                (handoffReady || velocityY <= -handoffVelocityPx) -> triggerHandoff()
+            commit && dismissPullPx >= dismissThresholdPx -> onClose()
+            // 松手可能与最后一个位移在同一帧内到达，直接读取状态，不依赖重组后的派生值。
+            commit && allowHandoff && canOpenConversation &&
+                current >= maxContentHeightPx && handoffPullPx >= handoffThresholdPx -> triggerHandoff()
             else -> {
                 val anchors = floatArrayOf(
                     minOf(baseContentHeightPx, settledHeightPx),
@@ -500,8 +505,20 @@ private fun BoxScope.AssistantPanel(
         }
     }
 
-    val dragByState = rememberUpdatedState<(Float) -> Float>(::dragBy)
-    val finishDragState = rememberUpdatedState<(Float) -> Unit>(::finishDrag)
+    // 局部函数引用的相等判断不包含捕获值，不能直接作为结构相等 State 的回调值。
+    val stopAutoExpandState = rememberUpdatedState { stopAutoExpand() }
+    val startDragState = rememberUpdatedState {
+        stopAutoExpand()
+        dismissPullPx = 0f
+        handoffPullPx = 0f
+        draggedHeightPx = currentAnimatedHeight.value
+    }
+    val dragByState = rememberUpdatedState { deltaY: Float, allowHandoff: Boolean ->
+        dragBy(deltaY, allowHandoff)
+    }
+    val finishDragState = rememberUpdatedState { commit: Boolean, allowHandoff: Boolean ->
+        finishDrag(commit, allowHandoff)
+    }
     val nestedScrollConnection = remember(
         baseContentHeightPx,
         maxContentHeightPx,
@@ -511,27 +528,13 @@ private fun BoxScope.AssistantPanel(
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                 if (source != NestedScrollSource.UserInput) return Offset.Zero
-                stopAutoExpand()
+                stopAutoExpandState.value()
                 val current = draggedHeightPx ?: currentAnimatedHeight.value
-                if (
-                    available.y < 0f &&
-                    canOpenConversation &&
-                    current >= maxContentHeightPx * 0.88f &&
-                    !listState.canScrollForward
-                ) {
-                    directHandoffPullPx += -available.y
-                    if (directHandoffPullPx >= directHandoffThresholdPx) {
-                        triggerHandoff()
-                    }
-                    // 第二段上滑由父容器在 pre-scroll 阶段完整消费，避免列表或
-                    // overscroll 先截走事件后，接管手势永远达不到阈值。
-                    return Offset(0f, available.y)
-                }
                 val shouldResize = (available.y < 0f && current < maxContentHeightPx) ||
                     (available.y > 0f && current > minOf(baseContentHeightPx, settledHeightPx) &&
                         !listState.canScrollBackward)
                 return if (shouldResize) {
-                    Offset(0f, dragByState.value(available.y))
+                    Offset(0f, dragByState.value(available.y, false))
                 } else {
                     Offset.Zero
                 }
@@ -543,26 +546,25 @@ private fun BoxScope.AssistantPanel(
                 source: NestedScrollSource,
             ): Offset {
                 if (source != NestedScrollSource.UserInput || available.y == 0f) return Offset.Zero
-                stopAutoExpand()
+                stopAutoExpandState.value()
                 val current = draggedHeightPx ?: currentAnimatedHeight.value
-                val atUpperEdge = available.y < 0f && current >= maxContentHeightPx * 0.88f
                 val atLowerEdge = available.y > 0f && current <= minOf(baseContentHeightPx, settledHeightPx)
-                return if (atUpperEdge || atLowerEdge) {
-                    Offset(0f, dragByState.value(available.y))
+                return if (atLowerEdge) {
+                    Offset(0f, dragByState.value(available.y, false))
                 } else {
                     Offset.Zero
                 }
             }
 
             override suspend fun onPreFling(available: Velocity): Velocity {
-                stopAutoExpand()
-                finishDragState.value(available.y)
+                stopAutoExpandState.value()
+                finishDragState.value(true, false)
                 return Velocity.Zero
             }
 
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-                stopAutoExpand()
-                finishDragState.value(available.y)
+                stopAutoExpandState.value()
+                finishDragState.value(true, false)
                 return Velocity.Zero
             }
         }
@@ -598,18 +600,17 @@ private fun BoxScope.AssistantPanel(
         ) {
             DragHandle(
                 colors = colors,
+                handoffReady = handoffReady,
                 modifier = Modifier.pointerInput(baseContentHeightPx, maxContentHeightPx) {
+                    // 回复完成会改变接管资格；更新回调而不重启正在进行的手势。
                     detectVerticalDragGestures(
-                        onDragStart = {
-                            stopAutoExpand()
-                            draggedHeightPx = currentAnimatedHeight.value
-                        },
+                        onDragStart = { startDragState.value() },
                         onVerticalDrag = { change, dragAmount ->
                             change.consume()
-                            dragBy(dragAmount)
+                            dragByState.value(dragAmount, true)
                         },
-                        onDragEnd = { finishDrag() },
-                        onDragCancel = { finishDrag() },
+                        onDragEnd = { finishDragState.value(true, true) },
+                        onDragCancel = { finishDragState.value(false, false) },
                     )
                 },
             )
@@ -637,8 +638,8 @@ private fun BoxScope.AssistantPanel(
         }
         EtaAssistantSuggestions(
             onSuggestionClick = onSuggestionClick,
+            colors = colors,
             visible = !hasMessages,
-            keyboardVisible = keyboardVisible,
         )
         AssistantComposer(
             state = state,
@@ -653,7 +654,6 @@ private fun BoxScope.AssistantPanel(
             colors = colors,
             focusRequester = focusRequester,
             onInputChange = onInputChange,
-            onClose = onClose,
             onSubmit = onSubmit,
             onStop = onStop,
             modifier = Modifier
@@ -669,18 +669,34 @@ private fun BoxScope.AssistantPanel(
 }
 
 @Composable
-private fun DragHandle(colors: EtaVoicePanelColors, modifier: Modifier = Modifier) {
+private fun DragHandle(
+    colors: EtaVoicePanelColors,
+    handoffReady: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    // 把手是接管的唯一入口：拉到阈值时变宽并染成主色，配合触觉反馈提示松手进入本体。
+    val handleWidth by animateDpAsState(
+        targetValue = if (handoffReady) 52.dp else 36.dp,
+        animationSpec = tween(160),
+        label = "assistant_handle_width",
+    )
+    val handleColor by animateColorAsState(
+        targetValue = if (handoffReady) MiuixTheme.colorScheme.primary else colors.tertiary,
+        animationSpec = tween(160),
+        label = "assistant_handle_color",
+    )
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(38.dp),
+            .height(38.dp)
+            .testTag("eta_assistant_drag_handle"),
         contentAlignment = Alignment.Center,
     ) {
         Box(
             modifier = Modifier
-                .size(width = 36.dp, height = 4.dp)
+                .size(width = handleWidth, height = 4.dp)
                 .clip(CircleShape)
-                .background(colors.tertiary),
+                .background(handleColor),
         )
     }
 }

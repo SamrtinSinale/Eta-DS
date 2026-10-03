@@ -1,10 +1,8 @@
-package io.github.mangi.eta.ui.components
+package io.github.mangi.eta.ui.markdown
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import io.github.mangi.eta.ui.markdown.StreamingGfmParserSession
-import io.github.mangi.eta.ui.markdown.StreamingGfmSnapshot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
@@ -23,7 +21,7 @@ internal class StreamingMarkdownState {
         targets = parseTargets,
         parse = { target ->
             withContext(Dispatchers.Default) {
-                parserSession.parse(target.content, isComplete = !target.isStreaming)
+                parserSession.parse(target.content, isComplete = !target.isStreaming, style = target.style)
             }
         },
         publish = { snapshot = it },
@@ -33,6 +31,7 @@ internal class StreamingMarkdownState {
 internal data class StreamingMarkdownTarget(
     val content: String,
     val isStreaming: Boolean,
+    val style: MarkdownInlineStyle = MarkdownInlineStyle.Default,
 )
 
 internal suspend fun consumeStreamingMarkdownTargets(

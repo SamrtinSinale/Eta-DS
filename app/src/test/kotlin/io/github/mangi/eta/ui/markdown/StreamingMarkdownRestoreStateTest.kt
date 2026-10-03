@@ -1,4 +1,4 @@
-package io.github.mangi.eta.ui.components
+package io.github.mangi.eta.ui.markdown
 
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

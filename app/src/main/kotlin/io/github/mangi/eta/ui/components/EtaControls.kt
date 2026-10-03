@@ -24,7 +24,6 @@ internal object EtaControlDefaults {
     val ButtonCornerRadius = 22.dp
     val ButtonMinHeight = 44.dp
     val ButtonPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
-    val DialogCornerRadius = 22.dp
     val DialogInsideMargin = DpSize(24.dp, 24.dp)
     val DialogOutsideMargin = DpSize(16.dp, 16.dp)
 }
@@ -65,7 +64,7 @@ internal fun EtaWindowDialog(
             show = show, title = title, summary = summary, modifier = modifier,
             backgroundColor = MiuixTheme.colorScheme.surfaceContainer,
             onDismissRequest = onDismissRequest, onDismissFinished = onDismissFinished,
-            cornerRadius = EtaControlDefaults.DialogCornerRadius,
+            cornerRadius = DialogDefaults.CornerRadius,
             insideMargin = EtaControlDefaults.DialogInsideMargin,
             outsideMargin = EtaControlDefaults.DialogOutsideMargin,
             maxWidth = DialogDefaults.MaxWidth,
@@ -89,7 +88,7 @@ internal fun EtaOverlayDialog(
             show = show, title = title, summary = summary, modifier = modifier,
             backgroundColor = MiuixTheme.colorScheme.surfaceContainer,
             onDismissRequest = onDismissRequest, onDismissFinished = onDismissFinished,
-            cornerRadius = EtaControlDefaults.DialogCornerRadius,
+            cornerRadius = DialogDefaults.CornerRadius,
             insideMargin = EtaControlDefaults.DialogInsideMargin,
             outsideMargin = EtaControlDefaults.DialogOutsideMargin,
             maxWidth = DialogDefaults.MaxWidth,

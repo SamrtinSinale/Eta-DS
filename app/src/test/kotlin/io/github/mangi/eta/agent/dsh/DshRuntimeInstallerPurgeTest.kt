@@ -1,8 +1,11 @@
 package io.github.mangi.eta.agent.dsh
 
 import java.io.File
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 
 /**
  * 安装器清空运行时目录时用的 root 脚本。
@@ -30,6 +33,10 @@ class DshRuntimeInstallerPurgeTest {
 
         // 嵌套挂载按层数从深到浅摘，不是字典序。
         assertTrue("没按深度排序：$script", script.contains("awk -F/ '{print NF,"))
+        // 目标已被删掉的孤儿挂载不能当阻塞（设备上就是这么被卡死的）。
+        assertTrue("没识别孤儿挂载：$script", script.contains("HETA_PURGE_ORPHAN"))
+        // umount 失败必须带上原因，别再静默。
+        assertTrue("umount 失败没记原因：$script", script.contains("HETA_UMOUNT_FAILED"))
         // 兜底：路径太浅（误传 / 或 /data）时什么都不做。
         assertTrue("没有路径深度兜底：$script", script.contains("/*/*/*/*"))
         assertTrue("没先 umount：$script", script.contains("umount -l"))
@@ -65,6 +72,82 @@ class DshRuntimeInstallerPurgeTest {
             "生成的脚本里应当带占位目标（shell 测试要替换它）",
             file.readText().contains(BEHAVIOUR_TEST_TARGET),
         )
+    }
+
+    @get:Rule
+    val temporaryFolder = TemporaryFolder()
+
+    /**
+     * 残骸识别的边界：只认 `dsh-runtime.broken-*` **目录**，别把正在用的运行时、staging
+     * 目录、同前缀的文件或无关目录卷进来。
+     */
+    @Test
+    fun staleRuntimeDirsOnlyPicksRenamedCorpseDirectories() {
+        val filesDir = temporaryFolder.newFolder("files")
+        File(filesDir, "dsh-runtime").mkdirs()
+        File(filesDir, "dsh-runtime.installing").mkdirs()
+        File(filesDir, "dsh-runtime.broken-111").mkdirs()
+        File(filesDir, "dsh-runtime.broken-222").mkdirs()
+        File(filesDir, "dsh-runtime.installing.broken-333").mkdirs()
+        File(filesDir, "dsh-runtime.broken-444").createNewFile()
+        File(filesDir, "unrelated").mkdirs()
+
+        val names = DshRuntimeInstaller.staleRuntimeDirs(filesDir).map { it.name }
+
+        assertEquals(
+            listOf("dsh-runtime.broken-111", "dsh-runtime.broken-222", "dsh-runtime.installing.broken-333"),
+            names,
+        )
+    }
+
+    /** 每次只清最早的两个：每个残骸都是一次 su，别让启动路径堆起来。 */
+    @Test
+    fun staleRuntimeDirsHonoursTheSweepLimitOldestFirst() {
+        val filesDir = temporaryFolder.newFolder("files")
+        for (index in 1..4) File(filesDir, "dsh-runtime.broken-10$index").mkdirs()
+
+        val names = DshRuntimeInstaller.staleRuntimeDirs(filesDir, limit = 2).map { it.name }
+
+        assertEquals(listOf("dsh-runtime.broken-101", "dsh-runtime.broken-102"), names)
+    }
+
+    /** 退避：同一批残骸窗口内只试一次；名单变了要立刻再试。 */
+    @Test
+    fun sweepBackoffOnlySkipsTheSameBatchInsideTheWindow() {
+        val now = 1_000_000_000_000L
+        val stamp = DshRuntimeInstaller.SweepStamp(listOf("dsh-runtime.broken-1"), now - 1_000)
+
+        assertTrue(
+            "同一批 + 窗口内应当跳过",
+            DshRuntimeInstaller.shouldSkipSweep(stamp, now, listOf("dsh-runtime.broken-1")),
+        )
+        assertTrue(
+            "出现新残骸要立刻再试",
+            !DshRuntimeInstaller.shouldSkipSweep(
+                stamp, now, listOf("dsh-runtime.broken-1", "dsh-runtime.broken-2"),
+            ),
+        )
+        assertTrue(
+            "窗口过了要再试",
+            !DshRuntimeInstaller.shouldSkipSweep(
+                stamp, stamp.attemptedAtMs + 25 * 60 * 60 * 1000L, listOf("dsh-runtime.broken-1"),
+            ),
+        )
+        assertTrue("没有记录就别跳过", !DshRuntimeInstaller.shouldSkipSweep(null, now, emptyList()))
+    }
+
+    @Test
+    fun sweepStampRoundTripsThroughItsFileFormat() {
+        val raw = "dsh-runtime.broken-111\ndsh-runtime.installing.broken-222\n1790833211587\n"
+
+        val stamp = DshRuntimeInstaller.parseSweepStamp(raw)
+
+        assertEquals(
+            listOf("dsh-runtime.broken-111", "dsh-runtime.installing.broken-222"),
+            stamp?.names,
+        )
+        assertEquals(1790833211587L, stamp?.attemptedAtMs)
+        assertEquals(null, DshRuntimeInstaller.parseSweepStamp("garbage"))
     }
 
     companion object {

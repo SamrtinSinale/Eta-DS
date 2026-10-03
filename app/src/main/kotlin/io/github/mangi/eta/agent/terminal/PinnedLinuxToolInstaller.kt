@@ -1,5 +1,6 @@
 package io.github.mangi.eta.agent.terminal
 
+import io.github.mangi.eta.core.SafeTreeDelete
 import android.content.Context
 import android.os.Build
 import io.github.mangi.eta.core.AndroidAgentLogger
@@ -75,10 +76,10 @@ internal class PinnedLinuxToolInstaller(
         val target = File(versions, artifact.version)
         val staging = File(rootfs, "opt/eta/$name.installing")
         try {
-            if (staging.exists() && !staging.deleteRecursively()) return false
+            if (staging.exists() && !SafeTreeDelete.deleteOrRetire(staging)) return false
             RootlessLinuxInstaller.extract(archive, staging, xz = tool == ManagedLinuxTool.NODE, stripComponents = 1)
             require(versions.mkdirs() || versions.isDirectory)
-            if (target.exists() && !target.deleteRecursively()) return false
+            if (target.exists() && !SafeTreeDelete.deleteOrRetire(target)) return false
             if (!staging.renameTo(target)) return false
             val localBin = File(rootfs, "usr/local/bin").apply { mkdirs() }
             when (tool) {
@@ -93,7 +94,7 @@ internal class PinnedLinuxToolInstaller(
             }
             return true
         } finally {
-            if (staging.exists()) staging.deleteRecursively()
+            if (staging.exists()) SafeTreeDelete.deleteOrRetire(staging)
         }
     }
 

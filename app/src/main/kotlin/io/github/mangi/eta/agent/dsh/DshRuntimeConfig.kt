@@ -242,6 +242,19 @@ internal data class DshRuntimeConfig(
     }
 
     /**
+     * 凭据文件写出来了吗。
+     *
+     * 没写出来就**不能启动**：dsh 会无 key 起来，表现成第一次请求 401，离真正的原因很远。
+     * 调用方（[DshAcpRuntime.execute]）在启动前查这个，不满足就明确失败。
+     */
+    internal fun hasCredentials(): Boolean = File(rootfsPath, CREDENTIALS_RELATIVE).isFile
+
+    /** run 结束时兜底删掉凭据文件：正常由启动脚本 `rm -f`，su 被拒/进程没起来时不会。 */
+    internal fun clearCredentialEnv() {
+        runCatching { File(rootfsPath, CREDENTIALS_RELATIVE).delete() }
+    }
+
+    /**
      * 把 Eta 自己的 MCP 端点声明给 dsh。
      * 端点与 App 内 Agent Loop 共用同一份工具目录，权限检查仍留在 Eta 侧。
      */

@@ -55,6 +55,15 @@ internal interface ProviderDao {
     @Update
     suspend fun updateProvider(provider: ProviderEntity): Int
 
+    /**
+     * 只改提示词一列。
+     *
+     * 迁移用整行 `updateProvider()` 会把循环开头那份快照的其它字段一起写回去（并发改了 baseUrl
+     * 就会被抹掉），还会顺带跑一遍选择修复。定向更新没有这些副作用。
+     */
+    @Query("UPDATE model_providers SET system_prompt = :systemPrompt WHERE id = :id")
+    suspend fun updateSystemPrompt(id: String, systemPrompt: String?): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertModels(models: List<ProviderModelEntity>)
 

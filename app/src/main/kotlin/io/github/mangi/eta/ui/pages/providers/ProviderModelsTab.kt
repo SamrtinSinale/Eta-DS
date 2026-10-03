@@ -749,10 +749,7 @@ private fun ModelEditDialog(
                 .orEmpty() + ReasoningEffort.DEFAULT
         )
     }
-    val contextError = contextWindowInputError(
-        contextWindowOverrideText,
-        context.getString(R.string.page_the_context_length_must_be_a_positive_integer_06ca7a),
-    )
+    val contextError = contextWindowInputError(contextWindowOverrideText)
 
     fun resetAutomaticReasoning() {
         reasoningOverrideActive = false
@@ -833,33 +830,7 @@ private fun ModelEditDialog(
                     ),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Text(
-                    text = when {
-                        contextWindowOverrideText.isNotBlank() -> context.getString(R.string.page_overwritten_will_take_precedence_over_remote_metadat_59934d)
-                        model.contextWindow != null ->
-                            stringResource(
-                                R.string.provider_auto_context,
-                                formatCompactTokenCount(model.contextWindow),
-                            )
-                        else -> context.getString(R.string.page_automatic_no_context_cap_was_provided_by_the_remote__db027f)
-                    },
-                    style = MiuixTheme.textStyles.footnote2,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                contextError?.let { validationError ->
-                    Text(
-                        text = validationError,
-                        style = MiuixTheme.textStyles.footnote2,
-                        color = StatusError,
-                    )
-                }
-                Text(
-                    text = stringResource(R.string.ui_this_value_is_used_for_session_clipping_and_context__c3f9e7),
-                    style = MiuixTheme.textStyles.footnote2,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
-                )
+                Spacer(modifier = Modifier.height(12.dp))
                 EtaPreferenceGroup(modifier = Modifier.fillMaxWidth()) {
                     EtaSwitchPreference(
                         checked = reasoningEnabled,

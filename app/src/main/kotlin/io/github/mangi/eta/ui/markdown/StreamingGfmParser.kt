@@ -1,62 +1,35 @@
 package io.github.mangi.eta.ui.markdown
 
-import com.mikepenz.markdown.model.ReferenceLinkHandlerImpl
-import com.mikepenz.markdown.model.State
-import com.mikepenz.markdown.model.parseMarkdown
 import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
+import org.intellij.markdown.parser.LinkMap
 import org.intellij.markdown.parser.MarkdownParser
 
 /**
  * 面向追加式模型输出的 GFM 解析会话。
  *
- * 每次提交都在调用线程完成一次完整 GFM 解析；调用方应把会话限制在后台串行
- * dispatcher。完整解析让块级语法遵循同一套 CommonMark/GFM 规则，而不是由 UI
- * 猜测节点类型。流尚未结束时，仅在虚拟 EOF 上补齐仍在等待闭合的结构，虚拟字符
- * 不会写回消息，也不会进入最终快照。
+ * 每次提交都在调用线程完成一次完整 GFM 解析，再转换为 [MarkdownDocument]；调用方应把
+ * 会话限制在后台串行 dispatcher。完整解析让块级语法遵循同一套 CommonMark/GFM 规则，
+ * 而不是由 UI 猜测节点类型。流尚未结束时，仅在虚拟 EOF 上补齐仍在等待闭合的结构，
+ * 虚拟字符不会写回消息，也不会进入最终快照。
  */
 internal class StreamingGfmParserSession {
-    private val flavour = GFMFlavourDescriptor()
-    private val parser = MarkdownParser(flavour)
-    private val referenceLinkHandler = ReferenceLinkHandlerImpl()
-    private var acceptedSource = ""
+    private val parser = MarkdownParser(GFMFlavourDescriptor())
+    private val documentBuilder = MarkdownDocumentBuilder()
 
-    fun parse(source: String, isComplete: Boolean): StreamingGfmSnapshot {
-        if (!source.startsWith(acceptedSource)) {
-            // 会话恢复或上游修正消息时重新建立基线；解析器本身没有可泄漏到新文档
-            // 的语法状态，后续快照仍保持追加式处理。
-            acceptedSource = ""
-        }
-        acceptedSource = source
-
-        val renderedSource = StreamingGfmProjection.project(
-            source = source,
-            isComplete = isComplete,
-        )
-        // 终态直接交给静态视图，链接索引也必须随这次后台解析完成，不能在切换时重解析。
-        val parsedState = if (isComplete) {
-            when (val parsed = parseMarkdown(
-                content = renderedSource,
-                lookupLinks = true,
-                flavour = flavour,
-                parser = parser,
-            )) {
-                is State.Success -> parsed
-                is State.Error -> throw parsed.result
-                is State.Loading -> error("Synchronous Markdown parsing returned Loading")
-            }
-        } else {
-            State.Success(
-                node = parser.buildMarkdownTreeFromString(renderedSource),
-                content = renderedSource,
-                linksLookedUp = false,
-                referenceLinkHandler = referenceLinkHandler,
-            )
-        }
+    fun parse(
+        source: String,
+        isComplete: Boolean,
+        style: MarkdownInlineStyle = MarkdownInlineStyle.Default,
+    ): StreamingGfmSnapshot {
+        val renderedSource = StreamingGfmProjection.project(source = source, isComplete = isComplete)
+        val root = parser.buildMarkdownTreeFromString(renderedSource)
+        // 引用式链接的定义可能出现在文末，只在终态整体解析一次；流式期间引用暂按原文显示。
+        val links = if (isComplete) LinkMap.buildLinkMap(root, renderedSource) else null
         return StreamingGfmSnapshot(
             originalSource = source,
             renderedSource = renderedSource,
             isComplete = isComplete,
-            state = parsedState,
+            document = documentBuilder.build(root, renderedSource, links, style),
         )
     }
 }
@@ -65,10 +38,10 @@ internal data class StreamingGfmSnapshot(
     val originalSource: String,
     val renderedSource: String,
     val isComplete: Boolean,
-    val state: State.Success,
+    val document: MarkdownDocument,
 ) {
-    fun completedStateFor(content: String): State.Success? =
-        state.takeIf { isComplete && originalSource == content }
+    fun completedDocumentFor(content: String): MarkdownDocument? =
+        document.takeIf { isComplete && originalSource == content }
 }
 
 /**

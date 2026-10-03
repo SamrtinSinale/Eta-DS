@@ -27,6 +27,8 @@ Heta 的「设置 → 语音」分别配置语音识别（ASR）与语音播报�
 
 千问可选择北京或新加坡，API Key 必须匹配所选地域。高级设置可填写服务根地址，包括业务空间专属域名；不要附加 `/api/v1` 或 `/compatible-mode/v1`。模型与协议绑定，不使用聊天模型列表推断语音能力。千问识别语言留空表示自动识别；指定语言时使用服务支持的语言代码。
 
+播报页内置千问与豆包各 16 个音色，按名称选择，列表标注男女声或方言。千问预设适配当前播报模型，豆包预设适配语音合成 2.0；已保存的音色 ID 会自动匹配名称，未匹配的 ID 保留在「自定义音色」中。
+
 豆包高级设置可修改资源 ID、服务根地址，或启用旧版 App ID＋Access Token 鉴权。旧版配置的 Access Token 填在对应的凭据输入框。自定义音色应填写所选模型支持的音色 ID，不会在 Heta 内创建或复刻音色。
 
 表单需点击「保存」。识别测试与音色试听使用当前草稿调用正式链路，不自动保存，也不自动开始。测试和试听可能产生对应服务费用。
@@ -46,7 +48,7 @@ Heta 上传 WAV 后生成有效期 15 分钟的读取签名 URL，向百炼提�
 - `SpeechInputController` 统一管理 start、finish、cancel 和一次性结果交付。系统服务适配沿用 `EtaSpeechInput`；独立进程 `EtaRecognitionService` 仍只负责系统兼容桥接，不向其他应用开放云端凭据。
 - `SpeechRecorder` 采集 16 kHz、单声道 PCM16。录音只暂存在内存中，文件接口封装 WAV；实时发送队列和响应解析均有限额，背压失败明确返回，不静默丢帧。
 - 千问实时协议通过 `text + stash` 替换当前 item 预览，以 completed 为最终文字，等待 session.finished 后结束。豆包使用专用二进制 codec，支持 Gzip、头扩展和最终包标记，不能套用 JSON WebSocket。
-- `SpeechPlaybackController` 负责合成与播放，`SpeechAudioLease` 协调本进程录音、播放和音频焦点。TTS 正文使用 GFM AST 提取可读文字，按句分块，使用 24 kHz PCM16 顺序播放。仅成功收到终止事件才把音频视为完整。
+- `SpeechPlaybackController` 负责合成与播放，`SpeechAudioLease` 协调本进程录音、播放和音频焦点。TTS 正文使用 GFM AST 提取可读文字，按句分块，使用 24 kHz PCM16 顺序播放。合成解码层识别裸 PCM 与流式 WAV，校验 WAV 格式并剥离容器头，不把头信息作为音频播放；文件头和采样可以跨响应片段。流式 WAV 长度字段可能是占位值，仅成功收到终止事件才把音频视为完整。`SpeechPcmOutput` 先填充播放缓冲区再启动音轨；不足一个缓冲区的短音频在合成结束后按实际帧数启动。
 - `SpeechSettingsRepository` 隔离持久化；普通配置进入现有 DataStore，凭据用 Android Keystore 的 AES-GCM 加密后保存。凭据不进入 RemotePreferences、会话、日志或数据导出；语音配置目前也不纳入手动备份。不可解密的凭据会要求重新填写，不静默当作空配置。
 - 设置页、聊天与浮窗复用相同控制器；网络与音频循环不进入 Composable、Hook 或 Agent loop，Runtime IPC 与归档格式保持兼容。
 
@@ -56,5 +58,6 @@ Heta 上传 WAV 后生成有效期 15 分钟的读取签名 URL，向百炼提�
 - [千问实时 ASR 客户端事件](https://help.aliyun.com/zh/model-studio/qwen-asr-realtime-client-events)、[服务端事件](https://help.aliyun.com/zh/model-studio/qwen-asr-realtime-server-events)
 - [豆包流式 ASR 协议](https://www.volcengine.com/docs/6561/1354869)
 - [千问 TTS API](https://help.aliyun.com/zh/model-studio/qwen-tts-api)、[音频播放示例](https://help.aliyun.com/zh/model-studio/non-realtime-tts-user-guide)
+- [千问音色列表](https://help.aliyun.com/zh/model-studio/qwen-tts-voice-list)、[豆包音色列表](https://docs.volcengine.com/docs/DoubaoVoice/Tonelist-1?lang=zh)
 - [豆包单向流式 TTS HTTP](https://docs.volcengine.com/docs/DoubaoVoice/unidirectional-streaming-text-to-speech-http?lang=zh)
 - [OSS V4 请求头签名](https://help.aliyun.com/zh/oss/developer-reference/recommend-to-use-signature-version-4)、[URL 签名](https://help.aliyun.com/zh/oss/developer-reference/add-signatures-to-urls)

@@ -31,6 +31,21 @@ internal object DshRuntimeInstaller {
     /** 清理旧运行时的等待上限：su 卡在授权上时不能把调用方线程永久挂住。 */
     private const val PURGE_TIMEOUT_MS = 20_000L
 
+    /** 清理脚本输出最多记多少行（按行截断，不是按字符一刀切）。 */
+    private const val PURGE_LOG_LINES = 24
+
+    /** 每次安装最多回收几个残骸（每个都是一次 su，最坏 20s）。 */
+    private const val STALE_SWEEP_LIMIT = 2
+
+    /** 残骸目录的命名前缀：运行时的、以及解包目录的（[retireAside] 用的就是这套）。 */
+    private val STALE_PREFIXES = listOf("$ROOT_DIR_NAME.broken-", "$STAGING_DIR_NAME.broken-")
+
+    /** sweep 退避：同一批残骸在这个窗口内只试一次。 */
+    private const val SWEEP_RETRY_WINDOW_MS = 24 * 60 * 60 * 1000L
+
+    /** 退避记录文件（放在 filesDir 下，和运行时目录同级）。 */
+    private const val SWEEP_STAMP_NAME = ".dsh-sweep-stamp"
+
     /** chroot 之后 dsh 的入口，供启动命令使用。 */
     const val NODE_IN_ROOT = "/opt/node/bin/node"
     const val DSH_ENTRY_IN_ROOT = "/opt/dsh/lib/bin.js"
@@ -56,18 +71,37 @@ internal object DshRuntimeInstaller {
      * 而不是往脏目录上继续铺新文件——9-30 那次就是这么装出一个永远"未就绪"的目录的。
      */
     @Synchronized
-    fun ensureInstalled(context: Context): Boolean {
-        if (isReady(context)) return true
+    fun ensureInstalled(context: Context, force: Boolean = false): Boolean {
         val root = runtimeDirectory(context)
+        if (!force && isReady(context)) {
+            // 残骸回收必须放在这个早返回**之前**：健康装机下面就直接返回了，放到后面等于永远
+            // 扫不到（发布出去的 3.0.6.18 就是这样：残骸一直躺在那，logcat 里一条都没有）。
+            // 没有残骸时 staleRuntimeDirs() 返回空列表 —— 不开 su、零成本。
+            sweepStaleRuntimes(root.parentFile)
+            return true
+        }
         val staging = File(root.parentFile, STAGING_DIR_NAME)
         return runCatching {
-            purgeLeftovers(staging)
-            if (staging.exists() && !staging.deleteRecursively()) {
-                error("解包目录删不掉：${staging.absolutePath}")
+            // 先收历次让路留下的残骸（含上次的 staging 残骸），再动本次这两个目录 ——
+            // 放在后面会把"本轮刚让路的那棵树"也扫一遍，白等一次 su。
+            sweepStaleRuntimes(root.parentFile)
+            val stagingExit = purgeLeftovers(staging)
+            if (staging.exists()) {
+                // 同一条护栏：purge 没成功（还有摘不掉的挂载 / su 没跑）就绝不递归删 ——
+                // `deleteRecursively()` 是 walkBottomUp() 逐个 delete()，会走进挂载点。
+                if (stagingExit != 0 || !staging.deleteRecursively()) {
+                    retireAside(staging) ?: error("解包目录删不掉：${staging.absolutePath}")
+                }
             }
-            purgeLeftovers(root)
-            if (root.exists() && !root.deleteRecursively()) {
-                error("旧运行时目录删不掉（多半还有挂载）：${root.absolutePath}")
+            val rootExit = purgeLeftovers(root)
+            if (root.exists() && (rootExit != 0 || !root.deleteRecursively())) {
+                // 删不掉多半是里面还有挂载点：外部工具链的 bind、或者目标已被删除的孤儿挂载。
+                // 孤儿挂载 umount 找不到路径、rm 也删不到，但**改名不影响它** —— 与其把用户卡在
+                // "未就绪"，不如把旧目录整体改名让路：挂载点跟着改名走，新运行时立刻可用；
+                // 等挂载消失，残骸由 [sweepStaleRuntimes] 自动回收。
+                retireAside(root)?.let { aside ->
+                    Log.w(TAG, "旧运行时目录让路：${aside.absolutePath}（purge exit=${rootExit ?: "未跑"}）")
+                } ?: error("旧运行时目录删不掉（多半还有挂载）：${root.absolutePath}")
             }
             if (!staging.mkdirs() && !staging.exists()) error("无法创建解包目录")
             context.assets.open(ASSET_NAME).use { raw ->
@@ -85,10 +119,25 @@ internal object DshRuntimeInstaller {
             true
         }.getOrElse { throwable ->
             Log.w(TAG, "runtime install failed", throwable)
-            runCatching { staging.deleteRecursively() }
+            // 不变式：任何递归删之前都要先 purge 成功。这里删不掉就改名让路 —— rename 不会
+            // 穿过挂载点，残骸交给 [sweepStaleRuntimes] 下次再试。
+            runCatching { if (staging.exists()) retireAside(staging) }
             false
         }
     }
+
+    /**
+     * 以 root 清一个目录（复用安装路径那套 su + 护栏脚本）。
+     *
+     * 给让路残骸的回收当提权兜底：残骸里 root 属主的内容 App 身份删不掉，只能提权；脚本本身
+     * "先验挂载再删、摘不干净就一个字不删"。
+     *
+     * @return 脚本退出码；没跑起来返回 null。
+     */
+    internal fun purgeAsRoot(target: File): Int? =
+        // 换个标签：它现在服务的可能是 apk-analysis / profiles 的残骸，叫 "purge leftovers"
+        //（安装路径的语义）会让人以为在清运行时。
+        purgeLeftovers(target, label = "残骸提权清理")
 
     /**
      * 强制重装：把已就绪的运行时也清掉重解包。
@@ -96,14 +145,16 @@ internal object DshRuntimeInstaller {
      * 给设置里的"重装对话运行时"入口用，同时也是**验证清理路径**（先摘挂载 → 解包到 staging
      * → 就位）的唯一通道 —— 正常升级只在 [REVISION] 变化时才走到那里。
      *
+     * **不靠删就绪标记来实现**：清理失败（挂载摘不掉、su 被拒）时旧目录还好端端地在那儿，
+     * 标记却已经没了 —— 一次点击就把用户本来能用的 dsh 变成永久"未就绪"。走
+     * [ensureInstalled] 的 `force`：失败时旧目录与旧标记原样保留，`isReady()` 依旧成立。
+     * 真正就位靠 staging 的 rename 整体替换，本来也不需要事先删标记。
+     *
      * 代价：DSH_HOME 在运行时目录里，dsh 侧的历史会一起没（App 侧映射表还在，下一轮会回落到
      * "新会话 + 历史摘要"）。所以要在对话空闲时用。
      */
     @Synchronized
-    fun reinstall(context: Context): Boolean {
-        runCatching { File(runtimeDirectory(context), READY_MARKER).delete() }
-        return ensureInstalled(context)
-    }
+    fun reinstall(context: Context): Boolean = ensureInstalled(context, force = true)
 
     /**
      * 借 su 清掉旧运行时里的残留：先摘挂载，再删 root 文件。
@@ -114,10 +165,12 @@ internal object DshRuntimeInstaller {
      * 以前这里只是一句 `su -c rm -rf`，三个问题：不 umount（挂载点还在时删不掉，见
      * [runtimePurgeScript]）、不看退出码、`waitFor()` 没有超时（su 卡在授权弹窗上就会把
      * 调用方线程永久挂住，界面永远"未就绪"且没有任何报错）。
+     *
+     * @return 脚本退出码；目录不存在（没跑）或超时返回 null。
      */
-    private fun purgeLeftovers(root: File) {
-        if (!root.exists()) return
-        runCatching {
+    private fun purgeLeftovers(root: File, label: String = "purge leftovers"): Int? {
+        if (!root.exists()) return null
+        return runCatching {
             // 输出重定向到临时文件，而不是留管道到 waitFor 之后再读：管道只有 64KB，
             // 子进程若在退出前写满就会卡在 write 上、永远不退出，于是这里只会看到"超时"，
             // 真正的原因（脚本输出太多）反而丢了。写文件就没有这个上限。
@@ -129,17 +182,117 @@ internal object DshRuntimeInstaller {
                     .start()
                 if (!started.waitFor(PURGE_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
                     started.destroyForcibly()
-                    Log.w(TAG, "purge leftovers 超时（${PURGE_TIMEOUT_MS}ms）：su 可能卡在授权，目录保持原样")
-                    return
+                    Log.w(TAG, "$label 超时（${PURGE_TIMEOUT_MS}ms）：su 可能卡在授权，目录保持原样")
+                    return null
                 }
-                val output = runCatching { log.readText() }.getOrDefault("").trim()
-                if (started.exitValue() != 0 || output.isNotEmpty()) {
-                    Log.w(TAG, "purge leftovers exit=${started.exitValue()} output=${output.take(600)}")
-                }
+                logPurgeOutcome(
+                    started.exitValue(),
+                    runCatching { log.readText() }.getOrDefault(""),
+                    label,
+                )
+                started.exitValue()
             } finally {
                 runCatching { log.delete() }
             }
-        }.onFailure { Log.w(TAG, "purge leftovers failed", it) }
+        }.onFailure { Log.w(TAG, "$label failed", it) }.getOrNull()
+    }
+
+    /**
+     * 记一条清理结果。
+     *
+     * 输出按**行**截断。以前是 600 字符一刀切：真机上 19 个挂载的 `UMOUNT_FAILED` /
+     * `ORPHAN` 行一多就只剩半截，排查又得靠猜。同时把"exit=0 且没有值得注意的行"（正常情况
+     * 只会带一条 HETA_PURGE_ORPHAN）降到 info，别让每次安装都刷一条 WARN。
+     */
+    private fun logPurgeOutcome(exitCode: Int, output: String, label: String) {
+        val lines = output.trim().lines().filter { it.isNotBlank() }
+        val notable = exitCode != 0 ||
+            lines.any { it.contains("FAILED") || it.contains("ABORT") || it.contains("INCOMPLETE") }
+        val rendered = buildString {
+            append(lines.take(PURGE_LOG_LINES).joinToString("\n"))
+            if (lines.size > PURGE_LOG_LINES) append("\n…（共 ${lines.size} 行）")
+        }
+        val message = "$label exit=$exitCode" + if (rendered.isEmpty()) "" else ":\n$rendered"
+        if (notable) Log.w(TAG, message) else Log.i(TAG, message)
+    }
+
+    /**
+     * 历次"改名让路"留下的残骸目录（`dsh-runtime.broken-<时间戳>`）。
+     *
+     * 这些目录里的挂载点跟着改名走，前缀扫描再也扫不到它们 —— 没有回收机制的话，它们既不会
+     * 被删也不会被重试，只能靠人手动收拾（而且可能是一棵完整的 278MB 树）。
+     */
+    internal fun staleRuntimeDirs(filesDir: File, limit: Int = Int.MAX_VALUE): List<File> =
+        filesDir.listFiles()
+            ?.filter { file ->
+                file.isDirectory && STALE_PREFIXES.any { file.name.startsWith(it) }
+            }
+            ?.sortedBy { it.name }
+            ?.take(limit)
+            ?: emptyList()
+
+    /**
+     * 上次 sweep 的记录：残骸名单 + 时间。
+     *
+     * 名单变了（出现新残骸）就立刻再试，否则同一批一天只试一次。
+     */
+    internal data class SweepStamp(val names: List<String>, val attemptedAtMs: Long)
+
+    internal fun parseSweepStamp(raw: String?): SweepStamp? {
+        val lines = raw?.lines()?.filter { it.isNotBlank() } ?: return null
+        val time = lines.lastOrNull()?.toLongOrNull() ?: return null
+        return SweepStamp(names = lines.dropLast(1), attemptedAtMs = time)
+    }
+
+    internal fun shouldSkipSweep(
+        stamp: SweepStamp?,
+        nowMs: Long,
+        names: List<String>,
+        windowMs: Long = SWEEP_RETRY_WINDOW_MS,
+    ): Boolean =
+        stamp != null && stamp.names == names && nowMs - stamp.attemptedAtMs in 0 until windowMs
+
+    /** 把删不掉的目录改名让路（挂载点跟着改名走）；改名失败返回 null。 */
+    private fun retireAside(directory: File): File? {
+        val aside = File(directory.parentFile, "${directory.name}.broken-${System.currentTimeMillis()}")
+        if (!directory.renameTo(aside)) return null
+        return aside
+    }
+
+    /**
+     * 尽力回收残骸；这是**收敛**的：能删就删，删不掉就留着下次再试。
+     *
+     * 护栏和主路径完全一致：**清理没成功就绝不递归删**。`deleteRecursively()` 是
+     * walkBottomUp() 逐个 delete()，会走进挂载点 —— 残骸里的技能库挂载源就是 App 自己的
+     * `files/skills`，App 进程删得动，越过挂载点就会把它删掉。
+     *
+     * 每次最多清 [STALE_SWEEP_LIMIT] 个（按名字取最早的两个）：每个都是一次 su，最坏 20s，
+     * 别让 App 启动路径堆起来。删不掉的（root 属主文件）下次再试。
+     */
+    private fun sweepStaleRuntimes(filesDir: File?) {
+        val directory = filesDir ?: return
+        val victims = staleRuntimeDirs(directory, STALE_SWEEP_LIMIT)
+        if (victims.isEmpty()) return
+        // 轻退避：同一批残骸一天只试一次（名字变了就立刻再试）。
+        // 没有 su 的设备、或残骸里有删不掉的 root 属主文件时，否则每次开 App 都白跑两次 su。
+        val stampFile = File(directory, SWEEP_STAMP_NAME)
+        val stamp = parseSweepStamp(runCatching { stampFile.readText() }.getOrNull())
+        val names = victims.map { it.name }
+        if (shouldSkipSweep(stamp, System.currentTimeMillis(), names)) return
+        runCatching {
+            stampFile.writeText(names.joinToString("\n") + "\n" + System.currentTimeMillis() + "\n")
+        }
+        for (victim in victims) {
+            if (purgeLeftovers(victim) != 0) {
+                Log.i(TAG, "残骸暂不清（清理未成功），留到下次：${victim.absolutePath}")
+                continue
+            }
+            if (victim.deleteRecursively()) {
+                Log.i(TAG, "已回收运行时残骸：${victim.absolutePath}")
+            } else {
+                Log.i(TAG, "残骸删不干净（多半是 root 属主文件），留到下次：${victim.absolutePath}")
+            }
+        }
     }
 
     private fun extract(tar: TarArchiveInputStream, root: File) {
@@ -204,17 +357,29 @@ internal fun runtimePurgeScript(target: String): String {
         append("c=$(readlink -f \"${'$'}t\" 2>/dev/null) || exit 1; ")
         // 兜底：目标至少要有四层（/data/data/<包名>/files/<目录>），否则拒绝执行。
         append("case \"${'$'}c\" in /*/*/*/*) ;; *) echo \"HETA_PURGE_ABORT: path too shallow: ${'$'}c\"; exit 1;; esac; ")
-        // 收集「规范化后在目标之下」的挂载点；mountinfo 里的路径也先规范化再比。
+        // 扫 mountinfo，分两类：
+        //   LIVE   —— 路径能解析、且规范化后在目标之下：要么被摘掉，要么阻塞删除
+        //   ORPHAN —— 路径已经解析不了（目标目录被删掉、只剩挂载表条目）：rm -rf 根本走不到它，
+        //             umount 也永远找不到路径。**它不能算阻塞** —— 设备上就撞到过：38 个这种
+        //             挂载把安装流程永久卡在"未就绪"。
         append("scan() { awk '{print ${'$'}5}' /proc/self/mountinfo 2>/dev/null | while read -r m; do ")
-        append("cm=$(readlink -f \"${'$'}m\" 2>/dev/null || echo \"${'$'}m\"); ")
-        append("case \"${'$'}cm\" in \"${'$'}c\"|\"${'$'}c\"/*) echo \"${'$'}m\";; esac; done; }; ")
-        // 从最深往外摘（按 / 的段数，不是字典序）。
-        append("scan | awk -F/ '{print NF, ${'$'}0}' | sort -rn | cut -d' ' -f2- ")
-        append("| while read -r m; do umount -l \"${'$'}m\" 2>/dev/null; done; ")
-        // 删之前再扫一遍：还有挂载就一个字都不删。
-        append("left=$(scan | wc -l); ")
+        append("cm=$(readlink -f \"${'$'}m\" 2>/dev/null); ")
+        append("if [ -z \"${'$'}cm\" ]; then echo \"ORPHAN ${'$'}m\"; continue; fi; ")
+        append("case \"${'$'}cm\" in \"${'$'}c\"|\"${'$'}c\"/*) echo \"LIVE ${'$'}m\";; esac; done; }; ")
+        // 从最深往外摘（按 / 的段数，不是字典序）；umount 失败要把原因带出来，别静默。
+        append("live() { scan | grep '^LIVE' | cut -d' ' -f2- ")
+        append("| awk -F/ '{print NF, ${'$'}0}' | sort -rn | cut -d' ' -f2-; }; ")
+        append("for m in ${'$'}(live); do ")
+        append("if err=$(umount -l \"${'$'}m\" 2>&1); then :; ")
+        append("elif err=$(/system/bin/umount -l \"${'$'}m\" 2>&1); then :; ")
+        append("else echo \"HETA_UMOUNT_FAILED: ${'$'}m: ${'$'}err\"; fi; done; ")
+        append("orphans=$(scan | grep -c '^ORPHAN'); ")
+        append("if [ \"${'$'}orphans\" -gt 0 ]; then ")
+        append("echo \"HETA_PURGE_ORPHAN: ${'$'}orphans mount(s) whose target is gone (not blocking; reboot clears them)\"; fi; ")
+        // 删之前再确认一次：LIVE 的没摘干净就一个字都不删。
+        append("left=$(live | wc -l); ")
         append("if [ \"${'$'}left\" -gt 0 ]; then echo \"HETA_PURGE_ABORT: ${'$'}left mount(s) still under ${'$'}c\"; ")
-        append("scan | head -n 8; exit 1; fi; ")
+        append("live | head -n 8; exit 1; fi; ")
         append("rm -rf \"${'$'}t\" 2>&1; ")
         append("if [ -e \"${'$'}t\" ]; then echo \"HETA_PURGE_INCOMPLETE:\"; ")
         append("ls -la \"${'$'}t\" 2>&1 | head -n 8; exit 1; fi")

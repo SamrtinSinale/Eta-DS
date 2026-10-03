@@ -1,5 +1,6 @@
 package io.github.mangi.eta.agent.terminal
 
+import io.github.mangi.eta.core.SafeTreeDelete
 import android.content.Context
 import io.github.mangi.eta.core.AndroidAgentLogger
 import io.github.mangi.eta.core.safeLogType
@@ -78,7 +79,7 @@ internal class LinuxApkAnalysisInstaller(
         if (isReady()) return@withContext ApkAnalysisInstallResult.AlreadyReady
         onProgress(ApkAnalysisInstallProgress(ApkAnalysisInstallStage.CHECKING))
         if (!LinuxEnvironmentPaths.rootfsReady(rootfs.absolutePath) ||
-            !File(rootfs, AlpineEnvironmentPaths.COMMON_TOOLS_MARKER).isFile
+            !LinuxEnvironmentPaths.commonToolsReady(rootfs.absolutePath, distribution)
         ) {
             return@withContext ApkAnalysisInstallResult.EnvironmentNotReady
         }
@@ -152,7 +153,7 @@ internal class LinuxApkAnalysisInstaller(
         staging: File,
         artifacts: Map<VerifiedArtifact, File>,
     ): Boolean = try {
-        staging.deleteRecursively()
+        SafeTreeDelete.deleteOrRetire(staging)
         check(staging.mkdirs())
         val jadxArchive = artifacts.getValue(JADX_ARTIFACT)
         check(extractJadx(jadxArchive, staging))
@@ -172,7 +173,7 @@ internal class LinuxApkAnalysisInstaller(
         AndroidAgentLogger.warn(
             "APK analysis profile action=prepare outcome=failed errorType=${throwable.safeLogType()}",
         )
-        staging.deleteRecursively()
+        SafeTreeDelete.deleteOrRetire(staging)
         false
     }
 
@@ -324,7 +325,7 @@ internal class LinuxApkAnalysisInstaller(
         val current = File(profileRoot, "current")
         val previous = File(profileRoot, "previous")
         if (LinuxEnvironmentPaths.backendOf(rootfs.absolutePath) == LinuxExecutionBackend.PROOT) {
-            current.deleteRecursively()
+            SafeTreeDelete.deleteOrRetire(current)
             File(rootfs, AlpineEnvironmentPaths.APK_ANALYSIS_MARKER).delete()
             if (previous.exists()) previous.renameTo(current)
             return
@@ -345,7 +346,7 @@ internal class LinuxApkAnalysisInstaller(
         artifacts.forEach(File::delete)
         val previous = File(rootfs, "opt/eta/apk-analysis/previous")
         if (LinuxEnvironmentPaths.backendOf(rootfs.absolutePath) == LinuxExecutionBackend.PROOT) {
-            previous.deleteRecursively()
+            SafeTreeDelete.deleteOrRetire(previous)
             return
         }
         val command = """
@@ -360,7 +361,7 @@ internal class LinuxApkAnalysisInstaller(
         val profileRoot = File(rootfs, "opt/eta/apk-analysis").apply { mkdirs() }
         val current = File(profileRoot, "current")
         val previous = File(profileRoot, "previous")
-        if (previous.exists() && !previous.deleteRecursively()) return false
+        if (previous.exists() && !SafeTreeDelete.deleteOrRetire(previous)) return false
         if (current.exists() && !current.renameTo(previous)) return false
         try {
             if (!staging.renameTo(current)) throw java.io.IOException("无法激活工具目录")
@@ -377,7 +378,7 @@ internal class LinuxApkAnalysisInstaller(
             File(rootfs, AlpineEnvironmentPaths.APK_ANALYSIS_MARKER).delete()
             return true
         } catch (_: java.io.IOException) {
-            current.deleteRecursively()
+            SafeTreeDelete.deleteOrRetire(current)
             if (previous.exists()) previous.renameTo(current)
             return false
         }

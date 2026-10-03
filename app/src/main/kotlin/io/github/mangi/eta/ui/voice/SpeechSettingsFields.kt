@@ -31,6 +31,7 @@ import io.github.mangi.eta.data.model.QwenSpeechConfig
 import io.github.mangi.eta.data.model.SpeechCredentialField
 import io.github.mangi.eta.data.model.SpeechRegion
 import io.github.mangi.eta.data.model.TtsProvider
+import io.github.mangi.eta.ui.components.EtaDropdownPreference
 import io.github.mangi.eta.ui.components.EtaOverlayDropdownPreference
 import io.github.mangi.eta.ui.components.EtaPreference
 import io.github.mangi.eta.ui.components.EtaPreferenceDivider
@@ -41,6 +42,7 @@ import io.github.mangi.eta.ui.components.EtaTextButton
 import io.github.mangi.eta.ui.components.StatusError
 import io.github.mangi.eta.ui.components.StatusSuccess
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Text
@@ -284,8 +286,10 @@ internal fun SpeechVoiceSection(store: SpeechSettingsStore) {
     val settings = store.settings
     val qwen = settings.tts == TtsProvider.QWEN
     val voice = if (qwen) settings.qwenVoice else settings.doubaoVoice
-    val preset = if (qwen) "Cherry" else "zh_female_vv_uranus_bigtts"
-    val custom = voice != preset
+    val presets = SpeechVoicePresets.forProvider(settings.tts)
+    val presetIndex = presets.indexOfFirst { it.id == voice }
+    var editingCustom by rememberSaveable(settings.tts) { mutableStateOf(false) }
+    val custom = editingCustom || presetIndex < 0
     val change: (String) -> Unit = {
         store.edit(if (qwen) settings.copy(qwenVoice = it) else settings.copy(doubaoVoice = it))
     }
@@ -293,12 +297,17 @@ internal fun SpeechVoiceSection(store: SpeechSettingsStore) {
     Column {
         EtaPreferenceGroupTitle(stringResource(R.string.speech_group_voice))
         EtaPreferenceGroup {
-            EtaOverlayDropdownPreference(
+            EtaDropdownPreference(
                 title = stringResource(R.string.speech_voice),
-                items = listOf(preset, stringResource(R.string.speech_voice_custom)),
-                selectedIndex = if (custom) 1 else 0,
+                items = presets.map { preset ->
+                    DropdownItem(text = stringResource(preset.name), summary = stringResource(preset.summary))
+                } + DropdownItem(text = stringResource(R.string.speech_voice_custom)),
+                selectedIndex = if (custom) presets.size else presetIndex,
+                useWindow = false,
                 onSelectedIndexChange = { index ->
-                    if (index == 0) change(preset) else if (!custom) change("")
+                    val preset = presets.getOrNull(index)
+                    editingCustom = preset == null
+                    if (preset != null) change(preset.id) else if (!custom) change("")
                 },
             )
             AnimatedVisibility(visible = custom) {

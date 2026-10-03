@@ -1,5 +1,6 @@
 package io.github.mangi.eta.agent.device
 
+import io.github.mangi.eta.core.SafeTreeDelete
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
@@ -223,7 +224,7 @@ internal class AgentFileReferenceGateway(
             } catch (_: RuntimeException) {
                 Resolution.Failure(Error.ImportFailed)
             } finally {
-                if (!completed) importDirectory.deleteRecursively()
+                if (!completed) SafeTreeDelete.deleteOrRetire(importDirectory)
             }
         }
 

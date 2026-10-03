@@ -1,4 +1,4 @@
-package io.github.mangi.eta.ui.components
+package io.github.mangi.eta.ui.markdown
 
 import androidx.compose.runtime.MonotonicFrameClock
 import androidx.compose.ui.text.TextLayoutResult

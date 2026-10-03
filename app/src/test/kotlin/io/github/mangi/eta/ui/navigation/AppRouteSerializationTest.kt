@@ -11,7 +11,6 @@ class AppRouteSerializationTest {
     fun allRoutesRoundTripWithMiuixNavJsonConfiguration() {
         val routes = listOf<AppRoute>(
             AppRoute.Home,
-            AppRoute.Chat,
             AppRoute.Browser,
             AppRoute.Terminal,
             AppRoute.Tools,

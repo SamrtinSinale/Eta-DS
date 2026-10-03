@@ -189,7 +189,7 @@ internal class LinuxPackageProfileInstaller(
         if (isReady()) return@withContext PackageProfileInstallResult.AlreadyReady
         onProgress(PackageProfileInstallProgress(PackageProfileInstallStage.CHECKING))
         if (!LinuxEnvironmentPaths.rootfsReady(rootfs.absolutePath) ||
-            !File(rootfs, AlpineEnvironmentPaths.COMMON_TOOLS_MARKER).isFile
+            !LinuxEnvironmentPaths.commonToolsReady(rootfs.absolutePath, distribution)
         ) {
             return@withContext PackageProfileInstallResult.EnvironmentNotReady
         }

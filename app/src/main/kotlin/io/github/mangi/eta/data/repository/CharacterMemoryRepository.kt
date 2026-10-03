@@ -1,5 +1,6 @@
 package io.github.mangi.eta.data.repository
 
+import io.github.mangi.eta.core.SafeTreeDelete
 import android.content.Context
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -39,7 +40,7 @@ internal object CharacterMemoryRepository {
         require(characterId.matches(Regex("[A-Za-z0-9_-]{1,128}"))) { "角色记忆标识无效" }
         val root = File(context.applicationContext.filesDir, "roleplay/$characterId").canonicalFile
         stores.remove(root.path)
-        root.deleteRecursively()
+        SafeTreeDelete.deleteOrRetire(root)
     }
 
     private fun store(context: Context, characterId: String): AgentMemoryStore {

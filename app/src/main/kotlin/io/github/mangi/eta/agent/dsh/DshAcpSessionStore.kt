@@ -80,11 +80,13 @@ internal object DshAcpSessionStateCodec {
         state: DshAcpSessionState,
         history: List<AgentModelClient.ConversationMessage>,
         model: String,
-        providerRoute: String,
     ): Boolean {
         if (state.sessionId.isBlank()) return false
         if (state.model != model) return false
-        if (state.providerRoute != providerRoute) return false
+        // 这里曾有一条 `state.providerRoute != providerRoute` 守卫，恒为假：调用方传进来的永远是
+        // 同一个 OFFICIAL_ROUTE（见 DshAcpRuntime.create）。**不要**改成 providerId —— 那样守卫会
+        // 恒真，每轮都重开会话、续接直接废掉；换 provider/model 的失效判断由 dsh 自己在
+        // request/context 里做（dsh-agent-loop/lib/index.js）。路由仍写进存档，只作记录。
         val count = state.historyCount
         if (count < 0 || count > history.size) return false
         return fingerprint(history, count) == state.historyFingerprint

@@ -59,6 +59,7 @@ import top.yukonga.miuix.kmp.squircle.squircleBorder
 import top.yukonga.miuix.kmp.squircle.squircleSurface
 import top.yukonga.miuix.kmp.theme.LocalDismissState
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.layout.DialogDefaults
 import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.window.WindowListPopup
 
@@ -162,6 +163,7 @@ internal fun AgentAttachmentPickerButton(
 
     WindowDialog(
         show = showPathDialog,
+        cornerRadius = DialogDefaults.CornerRadius,
         title = stringResource(R.string.ui_input_file_path_36d474),
         summary = stringResource(R.string.ui_supports_files_and_folders_under_internal_storage_or_520786),
         onDismissRequest = { showPathDialog = false },

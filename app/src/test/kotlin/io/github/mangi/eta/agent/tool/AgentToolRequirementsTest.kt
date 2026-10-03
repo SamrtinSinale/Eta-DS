@@ -13,10 +13,15 @@ import org.junit.Test
 class AgentToolRequirementsTest {
     @Test
     fun everyRegisteredToolHasExactlyOneRequirement() {
-        val tools = catalog(root = true)
+        val tools = catalog(root = true).also { CharacterMemoryTools.appendSchemas(it) }
         assertEquals(AgentToolRequirements.toolNames, tools.names())
         assertEquals(tools.length(), tools.names().size)
         assertFalse(tools.toString().contains("rootRequirement"))
+    }
+
+    @Test
+    fun ordinaryCatalogDoesNotExposeCharacterMemoryTools() {
+        assertTrue(catalog(root = true).names().none { it in CharacterMemoryTools.NAMES })
     }
 
     @Test
@@ -87,10 +92,7 @@ class AgentToolRequirementsTest {
         deviceSensitiveReadTools = true, deviceSensitiveActionTools = true,
         skillGitHubDiscovery = true, skillGitHubInstall = true, memoryTools = true,
         capabilities = AgentToolCapabilities(rootAvailable = root),
-    ).also {
-        // 角色会话的剧情记忆工具是运行期追加进目录的，登记表里同样有它们。
-        CharacterMemoryTools.appendSchemas(it)
-    }
+    )
 
     private fun JSONArray.names(): Set<String> = (0 until length()).mapTo(linkedSetOf()) {
         getJSONObject(it).getJSONObject("function").getString("name")

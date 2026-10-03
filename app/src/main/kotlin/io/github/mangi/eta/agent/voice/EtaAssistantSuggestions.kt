@@ -6,10 +6,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,12 +20,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -41,21 +39,13 @@ private val assistantSuggestions = listOf(
     "屏幕上有什么值得注意的信息",
 )
 
-private val suggestionBackground = Color(0xFFF2F3F5)
-
 @Composable
 internal fun EtaAssistantSuggestions(
     onSuggestionClick: (String) -> Unit,
+    colors: EtaVoicePanelColors,
     modifier: Modifier = Modifier,
     visible: Boolean = true,
-    keyboardVisible: Boolean = false,
 ) {
-    val sidePadding by animateDpAsState(
-        targetValue = if (keyboardVisible) 16.dp else 20.dp,
-        animationSpec = tween(900, delayMillis = 100, easing = FastOutSlowInEasing),
-        label = "assistant_suggestions_keyboard_padding",
-    )
-
     AnimatedVisibility(
         visible = visible,
         modifier = modifier,
@@ -68,7 +58,7 @@ internal fun EtaAssistantSuggestions(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = sidePadding, end = sidePadding, bottom = 8.dp),
+                .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             assistantSuggestions.forEachIndexed { index, suggestion ->
@@ -101,7 +91,7 @@ internal fun EtaAssistantSuggestions(
                 }
                 Box(
                     modifier = Modifier
-                        .height(32.dp)
+                        .height(34.dp)
                         .graphicsLayer {
                             alpha = opacity.value
                             scaleX = transform.value
@@ -109,16 +99,17 @@ internal fun EtaAssistantSuggestions(
                             translationY = (1f - transform.value) * 18.dp.toPx()
                         }
                         .clip(CircleShape)
-                        .background(suggestionBackground)
+                        .background(colors.input)
+                        .border(0.75.dp, colors.chipStroke, CircleShape)
                         .clickable(enabled = visible) { onSuggestionClick(suggestion) }
-                        .padding(horizontal = 10.dp),
+                        .padding(horizontal = 14.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = suggestion,
-                        color = Color(0xE6000000),
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp,
+                        color = colors.inputPrimary,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )

@@ -65,7 +65,6 @@ internal fun AssistantComposer(
     onDownloadModel: () -> Unit,
     onOpenSpeechSettings: () -> Unit,
     onKeyboard: () -> Unit,
-    onClose: () -> Unit,
     keyboardVisible: Boolean,
     colors: EtaVoicePanelColors,
     focusRequester: FocusRequester,
@@ -96,8 +95,6 @@ internal fun AssistantComposer(
                     speech = speech,
                     onMicrophone = onMicrophone,
                     onFinishSpeech = onFinishSpeech,
-                    onKeyboard = onKeyboard,
-                    onClose = onClose,
                     keyboardVisible = keyboardVisible,
                     colors = colors,
                     focusRequester = focusRequester,
@@ -118,8 +115,6 @@ private fun AssistantInputBar(
     speech: EtaSpeechState,
     onMicrophone: () -> Unit,
     onFinishSpeech: () -> Unit,
-    onKeyboard: () -> Unit,
-    onClose: () -> Unit,
     keyboardVisible: Boolean,
     colors: EtaVoicePanelColors,
     focusRequester: FocusRequester,
@@ -132,7 +127,6 @@ private fun AssistantInputBar(
     var textFocused by remember { mutableStateOf(false) }
     val inputHighlighted = textFocused || keyboardVisible
     val contentColor = colors.inputPrimary
-    val secondaryColor = colors.inputSecondary
     val hintColor = colors.inputTertiary
     val inputShape = RoundedCornerShape(24.dp)
     val trailingIcon = when {
@@ -170,25 +164,12 @@ private fun AssistantInputBar(
             .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(
-            onClick = if (speech.active) onKeyboard else onClose,
-            minWidth = 40.dp,
-            minHeight = 40.dp,
-            backgroundColor = Color.Transparent,
-        ) {
-            Icon(
-                painter = painterResource(if (speech.active) R.drawable.ic_assistant_keyboard_float else R.drawable.ic_assistant_home),
-                contentDescription = stringResource(if (speech.active) R.string.voice_use_keyboard else R.string.action_close),
-                tint = secondaryColor,
-                modifier = Modifier.size(24.dp),
-            )
-        }
         BasicTextField(
             value = input,
             onValueChange = onInputChange,
             modifier = Modifier
                 .weight(1f)
-                .padding(start = 4.dp, end = 2.dp, top = 6.dp, bottom = 6.dp)
+                .padding(start = 14.dp, end = 2.dp, top = 6.dp, bottom = 6.dp)
                 .onFocusChanged { textFocused = it.isFocused }
                 .focusRequester(focusRequester),
             enabled = state.phase != EtaVoicePhase.PROCESSING && !speech.active,

@@ -33,6 +33,46 @@ class LocaleResourcesTest {
         assertEquals("2 models", localizedQuantity("en-US", R.plurals.provider_models_count, 2))
     }
 
+    @Test
+    fun supplementalUiResourcesFollowLocaleWhileTechnicalTermsStayEnglish() {
+        assertEquals("Current device", localizedString("en-US", R.string.capability_current_device))
+        assertEquals("当前设备", localizedString("zh-CN", R.string.capability_current_device))
+        assertEquals("目前裝置", localizedString("zh-TW", R.string.capability_current_device))
+        assertEquals("Current device", localizedString("fr-FR", R.string.capability_current_device))
+        assertEquals("Heta is running", localizedString("en-US", R.string.execution_title))
+        assertEquals("Heta 正在运行", localizedString("zh-CN", R.string.execution_title))
+        assertEquals("Heta 正在執行", localizedString("zh-TW", R.string.execution_title))
+        assertEquals("Environment configuration", localizedString("en-US", R.string.linux_environment_configuration))
+        assertEquals("环境配置", localizedString("zh-CN", R.string.linux_environment_configuration))
+        assertEquals("環境設定", localizedString("zh-TW", R.string.linux_environment_configuration))
+        assertEquals("View description", localizedString("en-US", R.string.ui_view_description))
+        assertEquals("查看说明", localizedString("zh-CN", R.string.ui_view_description))
+        assertEquals("查看說明", localizedString("zh-TW", R.string.ui_view_description))
+        assertEquals("Retrying model request", localizedString("en-US", R.string.system_notice_model_retry))
+        assertEquals("模型请求重试", localizedString("zh-CN", R.string.system_notice_model_retry))
+        assertEquals("模型請求重試", localizedString("zh-TW", R.string.system_notice_model_retry))
+        assertEquals(
+            "1 task is running. Return to Heta to check progress.",
+            localizedQuantity("en-US", R.plurals.execution_summary, 1),
+        )
+        assertEquals(
+            "2 tasks are running. Return to Heta to check progress.",
+            localizedQuantity("en-US", R.plurals.execution_summary, 2),
+        )
+        assertEquals(
+            "已导入 1 个文件，其余文件无法读取或超过 32 MiB",
+            localizedQuantity("zh-CN", R.plurals.capability_workspace_partial_import, 1),
+        )
+        assertEquals(
+            "已匯入 2 個檔案，其餘檔案無法讀取或超過 32 MiB",
+            localizedQuantity("zh-TW", R.plurals.capability_workspace_partial_import, 2),
+        )
+        for (locale in listOf("en-US", "zh-CN", "zh-TW", "fr-FR")) {
+            assertEquals("Skills", localizedString(locale, R.string.route_skills))
+            assertEquals("API Key", localizedString(locale, R.string.speech_api_key))
+        }
+    }
+
     @Suppress("DEPRECATION")
     private fun localizedString(languageTag: String, resourceId: Int): String {
         val resources = context.resources

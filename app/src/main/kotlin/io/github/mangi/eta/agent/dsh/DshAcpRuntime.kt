@@ -55,7 +55,7 @@ internal class DshAcpRuntime(
         // 只有历史仍是上次那段前缀、且模型没换，才允许续接；否则重开会话并注入历史。
         val stored = sessionStore?.load(sessionKey)
         val resumable = stored?.let {
-            DshAcpSessionStateCodec.canResume(it, request.history, config.model, config.providerRoute)
+            DshAcpSessionStateCodec.canResume(it, request.history, config.model)
         } == true
         // resume 时 dsh 自己带着上下文，只发这一轮的新消息；重开会话才需要历史摘要。
         val promptText = if (resumable) text else promptWithHistory(request, text)
@@ -107,8 +107,11 @@ internal class DshAcpRuntime(
                 )
             )
         }
+        // 只生成一次：command() 有副作用（写 overlay 与凭据文件），以前在构造和打日志时
+        // 各调一次，等于子进程刚起来又把那两个文件重写一遍。
+        val command = config.command()
         val client = DshAcpClient(
-            command = config.command(),
+            command = command,
             workingDirectory = config.processDirectory,
             extraEnvironment = config.environment(),
             listener = object : DshAcpClient.Listener {
@@ -229,7 +232,14 @@ internal class DshAcpRuntime(
                 }
             },
         )
-        Log.i(TAG, "acp launch: exec chroot " + config.command().last().substringAfter("exec chroot "))
+        Log.i(TAG, "acp launch: exec chroot " + command.last().substringAfter("exec chroot "))
+        if (!config.hasCredentials()) {
+            finishWithFailure(
+                session,
+                "dsh 凭据文件写入失败，已停止本次执行（拒绝以无 API Key 状态启动，否则只会在第一次请求时收到 401）",
+            )
+            return false
+        }
         // 用户按停止时必须真的把 ACP 掐掉：否则 agent 仍在等审批/模型，GUI 只能一直显示执行中。
         val cancelBinding = session.controller.register {
             Log.i(TAG, "cancel requested: closing ACP process")
@@ -332,6 +342,7 @@ internal class DshAcpRuntime(
         } finally {
             cancelBinding.close()
             runCatching { client.close() }
+            runCatching { config.clearCredentialEnv() }
         }
     }
 

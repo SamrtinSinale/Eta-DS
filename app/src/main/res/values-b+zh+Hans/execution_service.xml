@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="execution_channel">任务运行</string>
+    <string name="execution_title">Heta 正在运行</string>
+    <plurals name="execution_summary">
+        <item quantity="other">%1$d 项任务正在运行，可返回 Heta 查看进度</item>
+    </plurals>
+    <string name="execution_stop">停止运行任务</string>
+</resources>

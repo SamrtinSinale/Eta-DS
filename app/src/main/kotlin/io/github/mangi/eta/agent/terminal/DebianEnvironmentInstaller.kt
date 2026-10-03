@@ -64,11 +64,15 @@ internal class DebianEnvironmentInstaller(
     fun status(): DebianEnvironmentStatus {
         val rootfs = rootfsDir()
         val version = readInstalledVersion(rootfs)
+        // 这里用**严格**判据（比对标记里的 version=）：产物版本换了而环境还是旧的，就该显示
+        // "未安装/需要重装"，用户才有入口。使用路径（终端、文件浏览器、守护）不受影响。
         val state = when {
             commonToolsReady(rootfs) -> DebianEnvironmentState.READY
-            baseRootfsReady(rootfs) -> DebianEnvironmentState.BASE_READY
+            baseRootfsReady(rootfs, DEBIAN_VERSION) -> DebianEnvironmentState.BASE_READY
             else -> DebianEnvironmentState.NOT_INSTALLED
         }
+        // 结构探针只记日志（缺哪些路径），**不参与上面的判定、不 gate 安装**。
+        if (state != DebianEnvironmentState.NOT_INSTALLED) structureWarnings(rootfs)
         return DebianEnvironmentStatus(state, version)
     }
 
@@ -98,7 +102,8 @@ internal class DebianEnvironmentInstaller(
         onProgress: suspend (DebianInstallProgress) -> Unit,
     ): DebianInstallResult = withContext(Dispatchers.IO) {
         val rootfs = rootfsDir()
-        if (baseRootfsReady(rootfs)) {
+        // 严格：版本对不上也算"没装"，于是会重新解包成期望版本，而不是把旧环境当就绪。
+        if (baseRootfsReady(rootfs, DEBIAN_VERSION)) {
             return@withContext DebianInstallResult.AlreadyReady
         }
         io.github.mangi.eta.data.repository.LinuxEnvironmentSettingsRepository.selectBackend(
@@ -142,7 +147,7 @@ internal class DebianEnvironmentInstaller(
         onProgress: suspend (DebianInstallProgress) -> Unit,
     ): DebianInstallResult = withContext(Dispatchers.IO) {
         val rootfs = rootfsDir()
-        if (!baseRootfsReady(rootfs)) return@withContext DebianInstallResult.BaseNotInstalled
+        if (!baseRootfsReady(rootfs, DEBIAN_VERSION)) return@withContext DebianInstallResult.BaseNotInstalled
         if (commonToolsReady(rootfs)) return@withContext DebianInstallResult.AlreadyReady
         onProgress(DebianInstallProgress(DebianInstallStage.CHECKING))
         preflightFailure()?.let { return@withContext it }
@@ -278,20 +283,8 @@ internal class DebianEnvironmentInstaller(
 
     private fun rootfsDir(): File = LinuxEnvironmentPaths.rootfsDir(context, LinuxDistribution.DEBIAN)
 
-    private fun commonToolsReady(rootfs: File): Boolean {
-        val marker = File(rootfs, COMMON_TOOLS_MARKER)
-        if (!baseRootfsReady(rootfs) || !marker.isFile) return false
-        return runCatching {
-            marker.useLines { lines -> lines.any { it.trim() == "toolset=$TOOLSET_REVISION" } }
-        }.getOrDefault(false)
-    }
-
-    private fun readInstalledVersion(rootfs: File): String? = runCatching {
-        File(rootfs, LinuxEnvironmentPaths.READY_MARKER).readLines()
-            .firstOrNull { it.startsWith("version=") }
-            ?.substringAfter('=')?.trim()
-            ?.takeIf { it.matches(Regex("[0-9]+")) }
-    }.getOrNull()
+    private fun readInstalledVersion(rootfs: File): String? =
+        LinuxEnvironmentPaths.readMarkerVersion(File(rootfs, LinuxEnvironmentPaths.READY_MARKER))
 
     companion object {
         private const val DEBIAN_VERSION = "13"
@@ -304,8 +297,120 @@ internal class DebianEnvironmentInstaller(
         private const val PREFLIGHT_ENVIRONMENT_UNAVAILABLE = 43
         private val installMutex = Mutex()
 
-        internal fun baseRootfsReady(rootfs: File): Boolean =
-            LinuxEnvironmentPaths.rootfsReady(rootfs.absolutePath)
+        /**
+         * 判"已就绪"还要求这些**根系统锚点**都在；缺任一 → 判未就绪（UI 会给出安装/重装入口）。
+         *
+         * 为什么不是工具清单：就绪的语义是"环境结构完好"，不是"某个工具装没装"。`git` 之类在不在
+         * 不影响环境能不能跑 shell、能不能装包，而且仓库已经把 PYTHON/PIP/NODE/SSH 做成各自
+         * profile 的标记 —— 拿工具当锚点，哪天工具挪了位置就会对**健康**环境误报，而补救动作是
+         * 重装 278MB，代价和误报完全不匹配。
+         *
+         * `/var/lib/dpkg/status` 是特意加的：3.0.6.14/15 那个清理脚本穿透挂载点删过一轮，
+         * **被挂载覆盖的目录内容**（dpkg 数据库首当其冲）可能被掏空，而 apt/dpkg 二进制还在、
+         * 就绪标记也在 —— 环境"看着是活的"，这就是"看似就绪"的典型形态。
+         */
+        internal val CORE_PATHS = listOf(
+            // env 也在这里：共享的 rootfsReady 先查它，env 一没就短路 —— 于是"掏得最狠"的那种
+            // 损坏（连解释器都没了）反而打不出"缺哪些路径"这条日志。并进来就都有名单。
+            "usr/bin/env",
+            "bin/sh",
+            "usr/bin/dpkg",
+            "var/lib/dpkg/status",
+            "usr/bin/apt",
+            "etc/os-release",
+        )
+
+        /** 能力清单：只写进日志，**不参与就绪判断**。 */
+        private val ADVISORY_TOOLS = listOf(
+            "git" to "usr/bin/git",
+            "python3" to "usr/local/bin/python3",
+            "node" to "usr/local/bin/node",
+            "rg" to "usr/bin/rg",
+            "gcc" to "usr/bin/gcc",
+            "make" to "usr/bin/make",
+            "curl" to "usr/bin/curl",
+        )
+
+        /**
+         * 探针结果缓存：键是 rootfs 路径 + **就绪标记的 mtime**。
+         *
+         * 就绪标记是安装最后一步写的，所以重装/补齐之后键必然变化、缓存自然失效；
+         * 反过来，进程存活期间如果文件被外部删掉而标记没动，这里会保留旧的结论 ——
+         * 这是刻意的：它只驱动一句提示，不 gate 任何功能（尤其不 gate dsh）。
+         */
+        private val structureProbe = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
+
+        /**
+         * 结构探针：返回缺失/不可读的核心路径（空 = 结构完好）。**只用于记日志/提示，绝不 gate
+         * 任何功能**（尤其不 gate 安装流程，也不 gate dsh）。
+         *
+         * 由 [status] 在"已装"的分支上调用，所以对从未安装过的环境零成本，也不会把"没装"
+         * 误判成"坏了"。核心集还没在**真实产物**上逐个验过（一个可疑点是基础 rootfs 里
+         * `var/lib/dpkg/status` 这类文件是否一定存在），所以现在只记日志，不驱动 UI 状态。
+         */
+        internal fun structureWarnings(rootfs: File): List<String> {
+            val marker = File(rootfs, LinuxEnvironmentPaths.READY_MARKER)
+            val key = rootfs.absolutePath + "@" + marker.lastModified()
+            return structureProbe.computeIfAbsent(key) {
+                val missing = CORE_PATHS.filter { path -> !existsInRootfs(rootfs, path) }
+                if (missing.isEmpty()) {
+                    AndroidAgentLogger.info(
+                        "Debian 工具链能力：" + ADVISORY_TOOLS.joinToString(" ") { (name, path) ->
+                            name + if (existsInRootfs(rootfs, path)) "✓" else "✗"
+                        },
+                    )
+                } else {
+                    AndroidAgentLogger.warn(
+                        "Debian rootfs 结构不完整（就绪标记在，但缺）：" + missing.joinToString(", "),
+                    )
+                }
+                missing
+            }
+        }
+
+        /**
+         * 宿主侧"装没装"的判定。
+         *
+         * 探针跑在**宿主侧**，所以绝对符号链接（`usr/local/bin/node -> /opt/eta/node/…`）的目标会按
+         * 宿主根解析、在宿主上并不存在，`exists()` 恒假 —— 但这东西其实是装了的。链接本身在就算存在：
+         * **宁可漏报，也不能把健康环境判成未就绪/能力缺失**（后者代价是提示用户重装 278MB）。
+         *
+         * 反过来，我们真正要抓的损坏（挂载点内容被掏空 → 文件被删）会让 `exists()` 与链接判定同时为假，
+         * 所以宽容不会削弱检测。
+         */
+        internal fun existsInRootfs(rootfs: File, path: String): Boolean {
+            val file = File(rootfs, path)
+            return file.exists() || java.nio.file.Files.isSymbolicLink(file.toPath())
+        }
+
+        /**
+         * 工具集是否就绪：标记**内容**里的 `toolset=<revision>`，不是"文件在不在"。
+         *
+         * 供 [LinuxEnvironmentPaths.commonToolsReady] 按发行版分派，也被 [status] 用。
+         */
+        internal fun commonToolsReady(rootfs: File): Boolean {
+            val marker = File(rootfs, COMMON_TOOLS_MARKER)
+            if (!baseRootfsReady(rootfs, DEBIAN_VERSION) || !marker.isFile) return false
+            return runCatching {
+                marker.useLines { lines -> lines.any { it.trim() == "toolset=$TOOLSET_REVISION" } }
+            }.getOrDefault(false)
+        }
+
+        /**
+         * "基础环境已安装"的判据：**只看就绪标记**（外加环境必备的 `usr/bin/env`）。
+         *
+         * 这里**绝不能**带结构探针：安装流程（[installBase] 的幂等判断、[installTools] 的前置判断）
+         * 都以它为准 —— 探针一误报，用户就卡在"基础环境安装不成功"（3.0.6.22 的实况：探针说缺路径，
+         * `installToolsLocked` 直接返回 `BaseNotInstalled`）。
+         * **标记是事实，探针只是提示**，见 [structureWarnings]。
+         *
+         * [expectedBaseVersion] 非空时额外比对标记里的 `version=`（见
+         * [LinuxEnvironmentPaths.rootfsReady]）：**参数必须原样转发下去** —— 漏转发时严格判定会
+         * 静默退化成宽松判定，"旧产物 → 提示重装"整条链路空转，而且因为方向偏宽松、测试又都走默认
+         * 参数，CI 全绿也发现不了。
+         */
+        internal fun baseRootfsReady(rootfs: File, expectedBaseVersion: String? = null): Boolean =
+            LinuxEnvironmentPaths.rootfsReady(rootfs.absolutePath, expectedBaseVersion)
 
         internal val AGENT_PACKAGES = listOf(
             "bash", "ca-certificates", "coreutils", "curl", "diffutils", "file", "findutils",

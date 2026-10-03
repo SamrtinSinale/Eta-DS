@@ -40,8 +40,9 @@ internal suspend fun synthesizeSpeech(settings: SpeechSettings, credentials: Spe
 }
 
 /** SSE 事件边界与 HTTP chunk 边界无关；豆包则每行一个 JSON 对象。 */
-internal class SpeechAudioStreamDecoder(private val qwen: Boolean, private val onAudio: (ByteArray) -> Unit) {
+internal class SpeechAudioStreamDecoder(private val qwen: Boolean, onAudio: (ByteArray) -> Unit) {
     private val event = StringBuilder()
+    private val pcm = SpeechPcmDecoder(onAudio)
     var finished = false
         private set
     private var audioBytes = 0L
@@ -87,15 +88,16 @@ internal class SpeechAudioStreamDecoder(private val qwen: Boolean, private val o
         if (encoded.isNotEmpty()) {
             val bytes = Base64.getDecoder().decode(encoded)
             audioBytes += bytes.size
-            if (audioBytes > 24_000 * 2 * 180 || bytes.size % 2 != 0) {
+            if (audioBytes > 24_000 * 2 * 180) {
                 throw SpeechFailure(SpeechErrorCode.PROTOCOL, "语音音频格式或长度无效")
             }
-            onAudio(bytes)
+            pcm.write(bytes)
         }
     }
 
     fun end() {
         if (qwen && !finished) flush()
         if (!finished || audioBytes == 0L) throw SpeechFailure(SpeechErrorCode.PROTOCOL, "语音音频不完整，请重试")
+        pcm.end()
     }
 }

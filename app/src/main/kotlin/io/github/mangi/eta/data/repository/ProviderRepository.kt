@@ -51,6 +51,25 @@ internal object ProviderRepository {
     suspend fun settings(): Settings =
         SettingsDataStore.settings()
 
+    /**
+     * 把"还留着旧默认提示词"的 provider 升级成当前默认（改名遗留：Eda/Eta → Heta）。
+     *
+     * 只做精确匹配（见 [BuiltinProviders.migratedSystemPrompt]），用户改过的一律不动；
+     * 没有要迁移的就一行都不写。启动时调一次即可，失败不影响启动。
+     *
+     * @return 实际迁移了几个 provider。
+     */
+    suspend fun migrateLegacySystemPrompts(): Int {
+        var migrated = 0
+        for (provider in allProviders()) {
+            val updated = BuiltinProviders.migratedSystemPrompt(provider.systemPrompt) ?: continue
+            // 定向更新：只动 system_prompt 一列，不整行覆盖，也不触发选择修复。
+            runCatching { dao().updateSystemPrompt(provider.id, updated) }
+                .onSuccess { if (it > 0) migrated++ }
+        }
+        return migrated
+    }
+
     suspend fun allProviders(): List<ProviderSetting> =
         dao().providers()
             .map { it.toDomain() }

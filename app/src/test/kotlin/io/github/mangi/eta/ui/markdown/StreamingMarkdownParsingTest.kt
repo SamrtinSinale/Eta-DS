@@ -1,7 +1,5 @@
-package io.github.mangi.eta.ui.components
+package io.github.mangi.eta.ui.markdown
 
-import io.github.mangi.eta.ui.markdown.StreamingGfmParserSession
-import io.github.mangi.eta.ui.markdown.StreamingGfmSnapshot
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.awaitCancellation
@@ -11,6 +9,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -107,7 +106,7 @@ class StreamingMarkdownParsingTest {
         )
 
         assertEquals(listOf(false, true), published.map { it.isComplete })
-        assertTrue(published.last().state.linksLookedUp)
+        assertNotNull(published.last().completedDocumentFor("**最终内容**"))
     }
 
     @Test

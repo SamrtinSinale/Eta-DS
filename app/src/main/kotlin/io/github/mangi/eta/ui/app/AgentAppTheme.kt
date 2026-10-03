@@ -1,9 +1,6 @@
 package io.github.mangi.eta.ui.app
 
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -90,53 +87,6 @@ fun AgentAppTheme(
                 platformDensity
             }
         }
-        val miuixColors = MiuixTheme.colorScheme
-        val materialColors = if (isDark) {
-            darkColorScheme(
-                primary = miuixColors.primary,
-                onPrimary = miuixColors.onPrimary,
-                primaryContainer = miuixColors.primaryContainer,
-                onPrimaryContainer = miuixColors.onPrimaryContainer,
-                secondary = miuixColors.secondary,
-                onSecondary = miuixColors.onSecondary,
-                secondaryContainer = miuixColors.secondaryContainer,
-                onSecondaryContainer = miuixColors.onSecondaryContainer,
-                background = miuixColors.background,
-                onBackground = miuixColors.onBackground,
-                surface = miuixColors.surface,
-                onSurface = miuixColors.onSurface,
-                surfaceVariant = miuixColors.surfaceVariant,
-                onSurfaceVariant = miuixColors.onSurfaceSecondary,
-                error = miuixColors.error,
-                onError = miuixColors.onError,
-                errorContainer = miuixColors.errorContainer,
-                onErrorContainer = miuixColors.onErrorContainer,
-                outline = miuixColors.outline,
-            )
-        } else {
-            lightColorScheme(
-                primary = miuixColors.primary,
-                onPrimary = miuixColors.onPrimary,
-                primaryContainer = miuixColors.primaryContainer,
-                onPrimaryContainer = miuixColors.onPrimaryContainer,
-                secondary = miuixColors.secondary,
-                onSecondary = miuixColors.onSecondary,
-                secondaryContainer = miuixColors.secondaryContainer,
-                onSecondaryContainer = miuixColors.onSecondaryContainer,
-                background = miuixColors.background,
-                onBackground = miuixColors.onBackground,
-                surface = miuixColors.surface,
-                onSurface = miuixColors.onSurface,
-                surfaceVariant = miuixColors.surfaceVariant,
-                onSurfaceVariant = miuixColors.onSurfaceSecondary,
-                error = miuixColors.error,
-                onError = miuixColors.onError,
-                errorContainer = miuixColors.errorContainer,
-                onErrorContainer = miuixColors.onErrorContainer,
-                outline = miuixColors.outline,
-            )
-        }
-
         CompositionLocalProvider(
             LocalAppearanceSettings provides appearance,
             LocalBlurEnabled provides appearance.blurEnabled,
@@ -144,11 +94,7 @@ fun AgentAppTheme(
             LocalPlatformDensity provides platformDensity,
             LocalDensity provides appDensity,
         ) {
-            // MaterialTheme 仅向 markdown-renderer-m3 提供与 Miuix 一致的颜色上下文。
-            MaterialTheme(
-                colorScheme = materialColors,
-                content = content,
-            )
+            content()
         }
     }
 }

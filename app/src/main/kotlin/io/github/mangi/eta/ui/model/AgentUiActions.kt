@@ -33,27 +33,6 @@ sealed interface PermissionHealthAction {
     data object NavigateBack : PermissionHealthAction
 }
 
-sealed interface AgentChatAction {
-    data object CompactContext : AgentChatAction
-    data object NavigateBack : AgentChatAction
-    data class ReasoningEffortChanged(val effort: ReasoningEffort) : AgentChatAction
-    data class ModelSelected(val modelId: String) : AgentChatAction
-    data class SubmitMessage(val text: String) : AgentChatAction
-    data object StopRun : AgentChatAction
-    data object OpenBrowser : AgentChatAction
-    data class ImageAttached(val uri: String) : AgentChatAction
-    data class RemoveImage(val id: String) : AgentChatAction
-    data class FilesAttached(val uris: List<String>) : AgentChatAction
-    data class FolderAttached(val uri: String) : AgentChatAction
-    data class FilePathAttached(val path: String) : AgentChatAction
-    data class RemoveFileReference(val id: String) : AgentChatAction
-    data class EditMessage(val id: String) : AgentChatAction
-    data object CancelMessageEdit : AgentChatAction
-    data class DeleteMessage(val id: String) : AgentChatAction
-    data class RegenerateMessage(val id: String) : AgentChatAction
-    data class SelectReplyCandidate(val id: String, val index: Int) : AgentChatAction
-}
-
 sealed interface AgentToolsAction {
     data object OpenEnhancements : AgentToolsAction
     data object OpenPermissions : AgentToolsAction

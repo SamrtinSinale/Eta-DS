@@ -1,7 +1,9 @@
-package io.github.mangi.eta.ui.components
+package io.github.mangi.eta.ui.markdown
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
@@ -45,12 +47,14 @@ internal class SmoothTextRevealCoordinator {
     private val records = sortedMapOf<RevealBlockKey, RevealRecord>()
     private val wakeups = Channel<Unit>(capacity = Channel.CONFLATED)
     private val drainedState = MutableStateFlow(true)
-    private val startedState = MutableStateFlow<Set<RevealBlockKey>>(emptySet())
+    // 列表 marker 在绘制阶段读取它；用快照状态而非 Flow，块开始显现只让 marker 图层重绘，
+    // 不会让整个列表随之重组。
+    private val startedState = mutableStateOf<Set<RevealBlockKey>>(emptySet())
     private var animationsPaused = false
 
     val drained: StateFlow<Boolean> = drainedState
     /** 已经开始显现的块，用于让列表 marker 与正文保持同一生命周期。 */
-    val started: StateFlow<Set<RevealBlockKey>> = startedState
+    val started: State<Set<RevealBlockKey>> get() = startedState
 
     val isAnimationPaused: Boolean
         get() = animationsPaused
@@ -509,44 +513,6 @@ internal fun updateGraphemeBoundaries(
             merged[restartBoundaryIndex + index] = restartOffset + boundary
         }
     }
-}
-
-internal class AppendOnlyGraphemeIndex {
-    private var indexedText = ""
-    private var boundaries = intArrayOf(0)
-
-    fun update(text: String) {
-        boundaries = updateGraphemeBoundaries(
-            previousText = indexedText,
-            previousBoundaries = boundaries,
-            text = text,
-        )
-        indexedText = text
-    }
-
-    fun endAfter(start: Int, maxGraphemes: Int): Int {
-        val clampedStart = start.coerceIn(0, indexedText.length)
-        if (clampedStart == indexedText.length || maxGraphemes <= 0) return clampedStart
-
-        val foundIndex = boundaries.binarySearch(clampedStart)
-        val firstEndIndex = if (foundIndex >= 0) foundIndex + 1 else -foundIndex - 1
-        val endIndex = (firstEndIndex + maxGraphemes - 1).coerceAtMost(boundaries.lastIndex)
-        return boundaries[endIndex]
-    }
-}
-
-internal fun commonUtf16PrefixLength(first: String, second: String): Int {
-    val limit = minOf(first.length, second.length)
-    var index = 0
-    while (index < limit && first[index] == second[index]) index += 1
-    if (
-        index in 1 until limit &&
-        first[index - 1].isHighSurrogate() &&
-        first[index].isLowSurrogate()
-    ) {
-        index -= 1
-    }
-    return index
 }
 
 internal fun smoothRevealSpeed(totalBacklog: Float): Float =

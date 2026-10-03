@@ -4,18 +4,23 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.MenuBook
 import androidx.compose.material.icons.rounded.AccessibilityNew
 import androidx.compose.material.icons.rounded.AccountTree
+import androidx.compose.material.icons.rounded.BugReport
+import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.Description
-import androidx.compose.material.icons.rounded.Extension
+import androidx.compose.material.icons.rounded.FilterAlt
 import androidx.compose.material.icons.rounded.GppMaybe
 import androidx.compose.material.icons.rounded.Hearing
+import androidx.compose.material.icons.rounded.ImportContacts
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Inventory
 import androidx.compose.material.icons.rounded.Inventory2
 import androidx.compose.material.icons.rounded.Language
@@ -28,11 +33,13 @@ import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.SettingsVoice
 import androidx.compose.material.icons.rounded.Smartphone
+import androidx.compose.material.icons.rounded.SportsBar
 import androidx.compose.material.icons.rounded.SupportAgent
 import androidx.compose.material.icons.rounded.SwipeUp
+import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.Terminal
-import androidx.compose.material.icons.rounded.TheaterComedy
 import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.material.icons.rounded.VerifiedUser
 import androidx.compose.material.icons.rounded.Visibility
@@ -59,6 +66,8 @@ import io.github.mangi.eta.config.PowerAssistantTarget
 import io.github.mangi.eta.config.Prefs
 import io.github.mangi.eta.data.repository.ProviderRepository
 import io.github.mangi.eta.data.repository.RuntimeConfigRepository
+import io.github.mangi.eta.data.update.AppLatestRelease
+import io.github.mangi.eta.data.update.AppUpdateChecker
 import io.github.mangi.eta.systemizer.GoogleAppSystemizerInstaller
 import io.github.mangi.eta.systemizer.RootManager
 import io.github.mangi.eta.systemizer.SystemizerInstallResult
@@ -66,6 +75,7 @@ import io.github.mangi.eta.ui.app.EnhancementSettingsHistory
 import io.github.mangi.eta.ui.app.rememberDeviceCapabilities
 import io.github.mangi.eta.ui.components.EtaArrowPreference
 import io.github.mangi.eta.ui.components.EtaDropdownPreference
+import io.github.mangi.eta.ui.components.EtaPreference
 import io.github.mangi.eta.ui.components.EtaPreferenceColors
 import io.github.mangi.eta.ui.components.EtaPreferenceDivider
 import io.github.mangi.eta.ui.components.EtaPreferenceGroup
@@ -113,6 +123,7 @@ private fun SettingsPageContent(
     var showSystemizerDialog by remember { mutableStateOf(false) }
     var installingSystemizer by remember { mutableStateOf(false) }
     var reinstallingDshRuntime by remember { mutableStateOf(false) }
+    var showDshReinstallDialog by remember { mutableStateOf(false) }
 
     // 悬浮窗权限状态：授权后从系统设置返回时（ON_RESUME）刷新。
     var overlayGranted by remember {
@@ -131,6 +142,42 @@ private fun SettingsPageContent(
         }.isFailure
         if (failed) {
             Toast.makeText(context, context.getString(R.string.settings_open_assistant_failed), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // 关于组：版本信息与更新检查。结果对话框在列表外渲染，状态需要页面级 owner。
+    val appPackageInfo = remember {
+        context.packageManager.getPackageInfo(context.packageName, 0)
+    }
+    val appVersionName = appPackageInfo.versionName.orEmpty()
+    val appVersionSummary = "${appPackageInfo.versionName} (${appPackageInfo.longVersionCode})"
+    val openUrl: (String) -> Unit = { url ->
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    }
+    var checkingUpdate by remember { mutableStateOf(false) }
+    var availableUpdate by remember { mutableStateOf<AppLatestRelease?>(null) }
+    val checkForUpdate: () -> Unit = {
+        if (!checkingUpdate) {
+            checkingUpdate = true
+            coroutineScope.launch {
+                val release = runCatching {
+                    withContext(Dispatchers.IO) { AppUpdateChecker.fetchLatest() }
+                }.getOrNull()
+                checkingUpdate = false
+                when {
+                    release == null -> Toast.makeText(
+                        context.applicationContext,
+                        context.getString(R.string.ui_update_check_failed),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    AppUpdateChecker.isNewer(release.version, appVersionName) -> availableUpdate = release
+                    else -> Toast.makeText(
+                        context.applicationContext,
+                        context.getString(R.string.ui_update_already_latest),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            }
         }
     }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -217,7 +264,7 @@ private fun SettingsPageContent(
                         summary = providerSummary,
                         startAction = {
                             EtaPreferenceIcon(
-                                icon = Icons.Rounded.Memory,
+                                icon = Icons.Rounded.Cloud,
                                 tint = EtaPreferenceColors.Blue,
                             )
                         },
@@ -256,7 +303,7 @@ private fun SettingsPageContent(
                         title = stringResource(R.string.route_skills),
                         startAction = {
                             EtaPreferenceIcon(
-                                icon = Icons.Rounded.Extension,
+                                icon = Icons.Rounded.ImportContacts,
                                 tint = EtaPreferenceColors.Green,
                             )
                         },
@@ -280,7 +327,7 @@ private fun SettingsPageContent(
                         title = "角色",
                         startAction = {
                             EtaPreferenceIcon(
-                                icon = Icons.Rounded.TheaterComedy,
+                                icon = Icons.Rounded.SportsBar,
                                 tint = EtaPreferenceColors.Orange,
                             )
                         },
@@ -366,7 +413,13 @@ private fun SettingsPageContent(
                     EtaPreferenceDivider()
                     EtaArrowPreference(
                         title = stringResource(R.string.settings_dsh_runtime_title),
-                        summary = stringResource(R.string.settings_dsh_runtime_summary),
+                        summary = stringResource(
+                            if (reinstallingDshRuntime) {
+                                R.string.settings_dsh_runtime_busy
+                            } else {
+                                R.string.settings_dsh_runtime_summary
+                            },
+                        ),
                         startAction = {
                             EtaPreferenceIcon(
                                 icon = Icons.Rounded.Memory,
@@ -374,26 +427,7 @@ private fun SettingsPageContent(
                             )
                         },
                         enabled = !reinstallingDshRuntime,
-                        onClick = {
-                            reinstallingDshRuntime = true
-                            coroutineScope.launch {
-                                val reinstalled = withContext(Dispatchers.IO) {
-                                    DshRuntimeInstaller.reinstall(context)
-                                }
-                                reinstallingDshRuntime = false
-                                Toast.makeText(
-                                    context,
-                                    context.getString(
-                                        if (reinstalled) {
-                                            R.string.settings_dsh_runtime_done
-                                        } else {
-                                            R.string.settings_dsh_runtime_failed
-                                        },
-                                    ),
-                                    Toast.LENGTH_SHORT,
-                                ).show()
-                            }
-                        },
+                        onClick = { showDshReinstallDialog = true },
                     )
                 }
             }
@@ -481,7 +515,7 @@ private fun SettingsPageContent(
                             prefs = prefs,
                             title = stringResource(R.string.ui_enable_vendor_assistant_custom_models_c8e465),
                             key = Prefs.Keys.AGENT_CUSTOM_MODEL,
-                            icon = Icons.Rounded.Memory,
+                            icon = Icons.Rounded.Cloud,
                             iconTint = EtaPreferenceColors.Blue,
                         )
 
@@ -491,7 +525,7 @@ private fun SettingsPageContent(
                             prefs = prefs,
                             title = stringResource(R.string.ui_only_take_over_with_agent_prefix_d17556),
                             key = Prefs.Keys.AGENT_REQUIRE_PREFIX,
-                            icon = Icons.Rounded.Code,
+                            icon = Icons.Rounded.FilterAlt,
                             iconTint = EtaPreferenceColors.Blue,
                         )
                     }
@@ -529,7 +563,7 @@ private fun SettingsPageContent(
                                 prefs = prefs,
                                 title = stringResource(R.string.ui_bright_screen_evokes_automatic_voice_input_4358fe),
                                 key = Prefs.Keys.SCREEN_ON_VOICE_COMMAND,
-                                icon = Icons.Rounded.Mic,
+                                icon = Icons.Rounded.SettingsVoice,
                                 iconTint = EtaPreferenceColors.Green,
                             )
 
@@ -748,28 +782,59 @@ private fun SettingsPageContent(
             item(key = "section_about") {
                 EtaPreferenceGroupTitle(stringResource(R.string.ui_about_bed172))
                 EtaPreferenceGroup {
+                    EtaPreference(
+                        title = stringResource(R.string.ui_about_version_title),
+                        summary = appVersionSummary,
+                        startAction = {
+                            EtaPreferenceIcon(
+                                icon = Icons.Rounded.Info,
+                                tint = EtaPreferenceColors.Blue,
+                            )
+                        },
+                    )
+
+                    EtaPreferenceDivider()
                     EtaArrowPreference(
-                        title = stringResource(R.string.ui_source_code_740296),
+                        title = stringResource(R.string.ui_about_update_title),
+                        summary = if (checkingUpdate) {
+                            stringResource(R.string.ui_about_update_checking)
+                        } else {
+                            null
+                        },
+                        startAction = {
+                            EtaPreferenceIcon(
+                                icon = Icons.Rounded.SystemUpdate,
+                                tint = EtaPreferenceColors.Green,
+                                enabled = !checkingUpdate,
+                            )
+                        },
+                        enabled = !checkingUpdate,
+                        onClick = checkForUpdate,
+                    )
+
+                    EtaPreferenceDivider()
+                    EtaArrowPreference(
+                        title = stringResource(R.string.ui_about_feedback_title),
+                        startAction = {
+                            EtaPreferenceIcon(
+                                icon = Icons.Rounded.BugReport,
+                                tint = EtaPreferenceColors.Orange,
+                            )
+                        },
+                        onClick = { openUrl("https://github.com/SamrtinSinale/Heta-dsh/issues") },
+                    )
+
+                    EtaPreferenceDivider()
+                    EtaArrowPreference(
+                        title = stringResource(R.string.ui_about_github_star_title),
+                        summary = stringResource(R.string.ui_about_github_star_hint),
                         startAction = {
                             EtaPreferenceIcon(
                                 icon = Icons.Rounded.Code,
                                 tint = EtaPreferenceColors.Blue,
                             )
                         },
-                        endActions = {
-                            Text(
-                                text = "GitHub",
-                                fontSize = MiuixTheme.textStyles.body2.fontSize,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantActions,
-                            )
-                        },
-                        onClick = {
-                            val intent = android.content.Intent(
-                                android.content.Intent.ACTION_VIEW,
-                                android.net.Uri.parse("https://github.com/Mangi-11/Heta"),
-                            )
-                            context.startActivity(intent)
-                        },
+                        onClick = { openUrl("https://github.com/SamrtinSinale/Heta-dsh") },
                     )
                 }
             }
@@ -807,6 +872,55 @@ private fun SettingsPageContent(
                 }
             },
         )
+
+        DshRuntimeReinstallDialog(
+            show = showDshReinstallDialog,
+            reinstalling = reinstallingDshRuntime,
+            onDismissRequest = {
+                if (!reinstallingDshRuntime) {
+                    showDshReinstallDialog = false
+                }
+            },
+            onConfirm = {
+                if (reinstallingDshRuntime) return@DshRuntimeReinstallDialog
+                showDshReinstallDialog = false
+                reinstallingDshRuntime = true
+                coroutineScope.launch {
+                    val reinstalled = withContext(Dispatchers.IO) {
+                        DshRuntimeInstaller.reinstall(context.applicationContext)
+                    }
+                    reinstallingDshRuntime = false
+                    Toast.makeText(
+                        context.applicationContext,
+                        context.getString(
+                            if (reinstalled) {
+                                R.string.settings_dsh_runtime_done
+                            } else {
+                                R.string.settings_dsh_runtime_failed
+                            },
+                        ),
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            },
+        )
+        availableUpdate?.let { update ->
+            EtaWindowDialog(
+                show = true,
+                title = stringResource(R.string.ui_update_available_title),
+                summary = stringResource(R.string.ui_update_available_message, update.version, appVersionName),
+                onDismissRequest = { availableUpdate = null },
+            ) {
+                MiuixDialogActions(
+                    confirmText = stringResource(R.string.ui_update_go_download),
+                    onCancel = { availableUpdate = null },
+                    onConfirm = {
+                        availableUpdate = null
+                        openUrl(update.url)
+                    },
+                )
+            }
+        }
 }
 
 // ── 系统化确认对话框 ─────────────────────────────────────────────────────────
@@ -832,6 +946,35 @@ private fun SystemizerConfirmDialog(
             },
             cancelEnabled = !installing,
             confirmEnabled = !installing,
+            onCancel = onDismissRequest,
+            onConfirm = onConfirm,
+        )
+    }
+}
+
+// ── 重装对话运行时确认对话框 ─────────────────────────────────────────────────
+
+@Composable
+private fun DshRuntimeReinstallDialog(
+    show: Boolean,
+    reinstalling: Boolean,
+    onDismissRequest: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    EtaWindowDialog(
+        show = show,
+        title = stringResource(R.string.settings_dsh_runtime_title),
+        summary = stringResource(R.string.settings_dsh_runtime_confirm),
+        onDismissRequest = onDismissRequest,
+    ) {
+        MiuixDialogActions(
+            confirmText = if (reinstalling) {
+                stringResource(R.string.status_processing)
+            } else {
+                stringResource(R.string.action_confirm)
+            },
+            cancelEnabled = !reinstalling,
+            confirmEnabled = !reinstalling,
             onCancel = onDismissRequest,
             onConfirm = onConfirm,
         )
